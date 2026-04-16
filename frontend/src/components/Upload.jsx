@@ -25,7 +25,8 @@ const Upload = ({ setTopicId, setPdfName }) => {
     formData.append('file', file);
 
     try {
-      const response = await axios.post('http://localhost:3003/upload', formData);
+      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3003';
+      const response = await axios.post(`${API_BASE}/upload`, formData);
       if (response.data.success) {
         if (setPdfName) setPdfName(file.name);
         setTopicId(response.data.topicId);
