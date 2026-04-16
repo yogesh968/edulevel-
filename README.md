@@ -58,3 +58,7 @@ Embeddings are a way of representing words, sentences, or images as arrays of nu
    npm run dev
    ```
 4. Follow the local host link provided in the terminal (usually `http://localhost:5173`) to view the application. 
+# Project Setup
+1. npm install in backend
+2. npm install in frontend
+3. Create .env
