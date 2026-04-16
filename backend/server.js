@@ -29,3 +29,4 @@ app.use('/images', express.static(path.join(__dirname, 'public', 'images')));
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
+// API versioning placeholder
