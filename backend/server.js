@@ -20,6 +20,20 @@ app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
+// Set Security Headers (Fixes the Font/CSP issue)
+app.use((req, res, next) => {
+    res.setHeader("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval'; img-src * data:; font-src * https://fonts.gstatic.com;");
+    next();
+});
+
+// Root Route (Fixes the 'Cannot GET /' 404 error)
+app.get('/', (req, res) => {
+    res.send('Edulevel+ Backend is Running Successfully 🚀');
+});
+
+// Handle Favicon requests
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 app.use('/upload', uploadRoutes);
 app.use('/chat', chatRoutes);
 
