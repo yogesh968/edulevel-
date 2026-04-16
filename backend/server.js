@@ -38,11 +38,12 @@ app.get('/', (req, res) => {
 // Handle Favicon requests
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
-// Route mapping - Handle both /api and raw routes for maximum Vercel compatibility
-app.use('/api/upload', uploadRoutes);
-app.use('/api/chat', chatRoutes);
-app.use('/upload', uploadRoutes);
-app.use('/chat', chatRoutes);
+// Universal Route Handlers (Matches both /api/chat and /chat automatically)
+app.use(['/api/upload', '/upload'], uploadRoutes);
+app.use(['/api/chat', '/chat'], chatRoutes);
+
+// Health Check for debugging
+app.get('/api/health', (req, res) => res.json({ status: "API is online and matching routes" }));
 
 // Simple endpoint to serve images locally if needed
 app.use('/images', express.static(path.join(__dirname, 'public', 'images')));
