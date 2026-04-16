@@ -63,3 +63,7 @@ Embeddings are a way of representing words, sentences, or images as arrays of nu
 2. npm install in frontend
 3. Create .env
 // Task: Add unit tests
+
+## Current Status
+- Repository initialized with structured file-wise commits.
+- 30-commit milestone reached.
