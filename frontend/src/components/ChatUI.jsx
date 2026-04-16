@@ -88,7 +88,7 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
 
     try {
       const historyToPass = messages.slice(-6).map(m => ({ role: m.role, text: m.text }));
-      const API_BASE = import.meta.env.VITE_API_URL;
+      const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '');
       const response = await axios.post(`${API_BASE}/api/chat`, {
         topicId,
         question: userMsg,
