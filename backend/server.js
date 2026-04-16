@@ -17,7 +17,7 @@ const app = express();
 const PORT = process.env.PORT || 3003;
 
 app.use(cors({
-    origin: ["https://edulevel.vercel.app", "http://localhost:5173"],
+    origin: [process.env.FRONTEND_URL, "http://localhost:5173", "http://localhost:3000"],
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
 }));
