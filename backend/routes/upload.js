@@ -7,17 +7,32 @@ import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
+import os from 'os';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const chunksFilePath = path.join(__dirname, '..', 'data', 'chunks.json');
+
+// VERCEL FIX: Use /tmp for storage because the main directory is read-only
+const isVercel = process.env.VERCEL === '1';
+const uploadDir = isVercel ? path.join(os.tmpdir(), 'uploads') : path.join(__dirname, '..', 'uploads');
+const chunksFilePath = isVercel ? path.join(os.tmpdir(), 'chunks.json') : path.join(__dirname, '..', 'data', 'chunks.json');
+const imagesFilePath = isVercel ? path.join(os.tmpdir(), 'images.json') : path.join(__dirname, '..', 'data', 'images.json');
+
+// Ensure directories exist safely
+try {
+    if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    // Also ensure /tmp versions of data files exist if on Vercel
+    if (isVercel) {
+        if (!fs.existsSync(chunksFilePath)) fs.writeFileSync(chunksFilePath, '[]');
+        if (!fs.existsSync(imagesFilePath)) fs.writeFileSync(imagesFilePath, '[]');
+    }
+} catch (e) {
+    console.warn("Storage warning (expected on some Vercel regions):", e.message);
+}
 
 const router = express.Router();
-
-// Ensure uploads dir exists
-const uploadsDir = path.join(__dirname, '..', 'uploads');
-if (!fs.existsSync(uploadsDir)){
-    fs.mkdirSync(uploadsDir);
-}
 
 const upload = multer({ dest: 'uploads/' });
 
