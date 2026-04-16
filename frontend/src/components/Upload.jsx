@@ -26,7 +26,7 @@ const Upload = ({ setTopicId, setPdfName }) => {
 
     try {
       const API_BASE = import.meta.env.VITE_API_URL || 'https://edulevel-zxml.vercel.app';
-      const response = await axios.post(`${API_BASE}/upload`, formData);
+      const response = await axios.post(`${API_BASE}/api/upload`, formData);
       if (response.data.success) {
         if (setPdfName) setPdfName(file.name);
         setTopicId(response.data.topicId);

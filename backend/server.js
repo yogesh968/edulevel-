@@ -38,8 +38,8 @@ app.get('/', (req, res) => {
 // Handle Favicon requests
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
-app.use('/upload', uploadRoutes);
-app.use('/chat', chatRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Simple endpoint to serve images locally if needed
 app.use('/images', express.static(path.join(__dirname, 'public', 'images')));
