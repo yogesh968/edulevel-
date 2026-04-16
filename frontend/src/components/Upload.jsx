@@ -25,7 +25,7 @@ const Upload = ({ setTopicId, setPdfName }) => {
     formData.append('file', file);
 
     try {
-      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3003';
+      const API_BASE = import.meta.env.VITE_API_URL || 'https://edulevel-zxml.vercel.app';
       const response = await axios.post(`${API_BASE}/upload`, formData);
       if (response.data.success) {
         if (setPdfName) setPdfName(file.name);
