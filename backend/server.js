@@ -38,8 +38,11 @@ app.get('/', (req, res) => {
 // Handle Favicon requests
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
+// Route mapping - Handle both /api and raw routes for maximum Vercel compatibility
 app.use('/api/upload', uploadRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/upload', uploadRoutes);
+app.use('/chat', chatRoutes);
 
 // Simple endpoint to serve images locally if needed
 app.use('/images', express.static(path.join(__dirname, 'public', 'images')));
@@ -47,4 +50,7 @@ app.use('/images', express.static(path.join(__dirname, 'public', 'images')));
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
+
+// Essential for Vercel Serverless environment
+export default app;
 // API versioning placeholder
