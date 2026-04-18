@@ -62,8 +62,16 @@ router.post('/', async (req, res) => {
              
              let highestSim = -1;
              for (let i = 0; i < imagesData.length; i++) {
-                  if (imgSimilarities[i] > highestSim && imgSimilarities[i] > 0.20) { 
-                      highestSim = imgSimilarities[i];
+                  // Direct keyword match boost
+                  const hasDirectKeyword = imagesData[i].keywords.some(k => 
+                      question.toLowerCase().includes(k.toLowerCase())
+                  ) || imagesData[i].title.toLowerCase().includes(question.toLowerCase());
+
+                  let score = imgSimilarities[i] || 0;
+                  if (hasDirectKeyword) score += 0.4; // Boost significantly if keyword is in question
+
+                  if (score > highestSim && score > 0.1) { 
+                      highestSim = score;
                       bestImage = {
                           filename: imagesData[i].filename,
                           title: imagesData[i].title,

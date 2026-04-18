@@ -161,7 +161,7 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
                     <span>Relevant Diagram</span>
                   </div>
                   <img 
-                    src={`${API_BASE}/images/${msg.image.filename}`} 
+                    src={`/images/${msg.image.filename}`} 
                     alt={msg.image.title} 
                     className="message-image" 
                     onClick={() => setSelectedImage(msg.image)}
@@ -200,7 +200,7 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
                 <X size={24} />
               </button>
               <img 
-                src={selectedImage.isUser ? selectedImage.url : `${API_BASE}/images/${selectedImage.filename}`} 
+                src={selectedImage.isUser ? selectedImage.url : `/images/${selectedImage.filename}`} 
                 alt={selectedImage.title} 
                 className="modal-image" 
               />
