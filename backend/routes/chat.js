@@ -9,10 +9,10 @@ import os from 'os';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// VERCEL FIX: Match the storage location used in the upload route
+// VERCEL FIX: images.json is bundled with the source, use stable path
 const isVercel = process.env.VERCEL === '1';
 const chunksFilePath = isVercel ? path.join(os.tmpdir(), 'chunks.json') : path.join(__dirname, '..', 'data', 'chunks.json');
-const imagesFilePath = isVercel ? path.join(os.tmpdir(), 'images.json') : path.join(__dirname, '..', 'data', 'images.json');
+const imagesFilePath = path.join(__dirname, '..', 'data', 'images.json');
 
 const router = express.Router();
 
