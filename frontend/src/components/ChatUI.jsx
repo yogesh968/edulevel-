@@ -220,10 +220,10 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
                         <span>Relevant Diagram</span>
                       </div>
                       <img
-                        src={`/images/${img.filename}`}
+                        src={img.filename.startsWith('http') ? img.filename : `${API_BASE}/images/${img.filename}`}
                         alt={img.title}
                         className="message-image"
-                        onClick={() => setSelectedImage(img)}
+                        onClick={() => setSelectedImage({ ...img, url: img.filename.startsWith('http') ? img.filename : `${API_BASE}/images/${img.filename}` })}
                       />
                       <div className="image-title">{img.title}</div>
                       {img.description && (
@@ -296,7 +296,11 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
         <div className="image-modal-overlay" onClick={() => setSelectedImage(null)}>
           <div className="image-modal-content" onClick={(e) => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setSelectedImage(null)}><X size={24} /></button>
-            <img src={selectedImage.isUser ? selectedImage.url : `/images/${selectedImage.filename}`} alt={selectedImage.title} className="modal-image" />
+            <img 
+              src={selectedImage.isUser ? selectedImage.url : (selectedImage.filename?.startsWith('http') ? selectedImage.filename : `${API_BASE}/images/${selectedImage.filename}`)} 
+              alt={selectedImage.title} 
+              className="modal-image" 
+            />
             <div className="modal-title">{selectedImage.title}</div>
           </div>
         </div>
