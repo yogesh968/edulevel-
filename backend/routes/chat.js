@@ -40,7 +40,7 @@ router.post('/', async (req, res) => {
               })())
             : "";
 
-        // 4. Image Retrieval Logic (Multi-Image Support) - Before LLM
+        // 4. Image Retrieval Logic (Guaranteed Matching Layer)
         let imagesData = [];
         if (fs.existsSync(imagesFilePath)) {
             imagesData = JSON.parse(fs.readFileSync(imagesFilePath, 'utf8'));
@@ -50,59 +50,67 @@ router.post('/', async (req, res) => {
         let visualContext = "";
 
         if (imagesData.length > 0) {
-             console.log(`[IMAGE LOG]: Processing retrieval for question: "${question}"`);
+             const queryLower = (question || "").toLowerCase();
+             console.log(`[IMAGE LOG]: Aggressive retrieval for query: "${queryLower}"`);
              
+             // 1. Semantic Search
              let imgSimilarities = [];
              try {
                 const imageSentences = imagesData.map(img => `${img.title}. ${img.description} Keywords: ${img.keywords.join(', ')}`);
-                imgSimilarities = await computeSimilarities(question, imageSentences);
+                imgSimilarities = await computeSimilarities(queryLower || "diagram", imageSentences);
              } catch (err) {
-                console.error("[IMAGE LOG]: Similarity API failed, falling back to keyword matching:", err.message);
                 imgSimilarities = new Array(imagesData.length).fill(0);
              }
              
+             // 2. Multi-Layer Scoring
              const scoredImages = imagesData.map((img, i) => {
-                  let semanticScore = imgSimilarities[i] || 0;
-                  let keywordScore = 0;
+                  let score = imgSimilarities[i] || 0;
                   
-                  const queryLower = question.toLowerCase();
+                  // A. Guaranteed Keyword Map (Instant Boost)
+                  const keyMappings = {
+                      'sound': ['img_001', 'img_sound_02'],
+                      'bell': ['img_001'],
+                      'ear': ['img_human_ear'],
+                      'cell': ['img_plant_cell', 'img_animal_cell'],
+                      'light': ['img_light_spectrum'],
+                      'work': ['img_work_power'],
+                      'vibrate': ['img_001', 'img_sound_01']
+                  };
+
+                  for (const [key, ids] of Object.entries(keyMappings)) {
+                      if (queryLower.includes(key) && ids.includes(img.id)) {
+                          score += 5.0; // Overwhelming boost
+                      }
+                  }
+
+                  // B. General Keyword Match
+                  if (img.keywords.some(k => queryLower.includes(k.toLowerCase())) || 
+                      img.title.toLowerCase().includes(queryLower)) {
+                      score += 1.0;
+                  }
                   
-                  // 1. Direct Keyword Match (0.6 boost)
-                  const hasDirectKeyword = img.keywords.some(k => queryLower.includes(k.toLowerCase())) || 
-                                         img.title.toLowerCase().includes(queryLower);
-                  if (hasDirectKeyword) keywordScore += 0.6;
-                  
-                  // 2. Specific Iconic Boost (0.4 boost)
-                  if (queryLower.includes('sound') && img.id.includes('sound')) keywordScore += 0.4;
-                  if (queryLower.includes('sound') && img.id === 'img_001') keywordScore += 0.5; // Bell for Sound
-                  if (queryLower.includes('bell') && img.id === 'img_001') keywordScore += 0.8;
-                  if (queryLower.includes('cell') && img.id.includes('cell')) keywordScore += 0.6;
-                  
-                  const finalScore = semanticScore + keywordScore;
-                  return { ...img, score: finalScore };
+                  return { ...img, score };
              });
 
              scoredImages.sort((a, b) => b.score - a.score);
              
-             // Log the top scored image for debugging
-             if (scoredImages.length > 0) {
-                 console.log(`[IMAGE LOG]: Top match: ${scoredImages[0].title} (Score: ${scoredImages[0].score})`);
-             }
-
+             // 3. Selection with high reliability
              relevantImages = scoredImages
-                .filter(img => img.score > 0.4) // stricter threshold (matching must be strong)
-                .slice(0, 2) // Max 2 photos as requested
-                .map(img => ({
-                    filename: img.filename,
-                    title: img.title,
-                    description: img.description
-                }));
+                .filter(img => img.score > 0.3) // Lowered hurdle to ensure output
+                .slice(0, 2)
+                .map(img => {
+                    console.log(`[IMAGE LOG]: SUCCESS! Returning ${img.title} (Score: ${img.score})`);
+                    return {
+                        filename: img.filename,
+                        title: img.title,
+                        description: img.description
+                    };
+                });
 
              if (relevantImages.length > 0) {
-                visualContext = "\n\n[AVAILABLE DIAGRAMS]:\n" + relevantImages.map(img => `- ${img.title}: ${img.description}`).join('\n');
-                console.log(`[IMAGE LOG]: Found ${relevantImages.length} relevant images.`);
+                visualContext = "\n\n[USER-PROVIDED DIAGRAMS FOR THIS TOPIC]:\n" + relevantImages.map(img => `- ${img.title}: ${img.description}`).join('\n');
              } else {
-                console.log(`[IMAGE LOG]: No images met the threshold.`);
+                console.log(`[IMAGE LOG]: NO MATCHES found for: "${queryLower}"`);
              }
         }
 
