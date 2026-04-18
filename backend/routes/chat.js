@@ -40,7 +40,7 @@ router.post('/', async (req, res) => {
               })())
             : "";
 
-        // 4. Image Retrieval Logic (Guaranteed Matching Layer)
+        // 4. Image Retrieval Logic (Guaranteed + Contextual Layer)
         let imagesData = [];
         if (fs.existsSync(imagesFilePath)) {
             imagesData = JSON.parse(fs.readFileSync(imagesFilePath, 'utf8'));
@@ -50,8 +50,15 @@ router.post('/', async (req, res) => {
         let visualContext = "";
 
         if (imagesData.length > 0) {
-             const queryLower = (question || "").toLowerCase();
-             console.log(`[IMAGE LOG]: Aggressive retrieval for query: "${queryLower}"`);
+             const rawQuestion = (question || "").toLowerCase();
+             // Contextual Search: If the question is a follow-up (short), add context from recent history
+             let searchContext = "";
+             if (rawQuestion.length < 20 && history.length > 0) {
+                 const recentUserMsgs = history.filter(m => m.role === 'user').slice(-2).map(m => m.text).join(" ");
+                 searchContext = recentUserMsgs.toLowerCase();
+             }
+             const queryLower = `${rawQuestion} ${searchContext}`.trim();
+             console.log(`[IMAGE LOG]: Search query (Combined): "${queryLower}"`);
              
              // 1. Semantic Search
              let imgSimilarities = [];
@@ -59,6 +66,7 @@ router.post('/', async (req, res) => {
                 const imageSentences = imagesData.map(img => `${img.title}. ${img.description} Keywords: ${img.keywords.join(', ')}`);
                 imgSimilarities = await computeSimilarities(queryLower || "diagram", imageSentences);
              } catch (err) {
+                console.error("[IMAGE LOG]: Semantic search failed, using keywords only.");
                 imgSimilarities = new Array(imagesData.length).fill(0);
              }
              
@@ -66,15 +74,16 @@ router.post('/', async (req, res) => {
              const scoredImages = imagesData.map((img, i) => {
                   let score = imgSimilarities[i] || 0;
                   
-                  // A. Guaranteed Keyword Map (Instant Boost)
+                  // A. Guaranteed Keyword Map (Instant Force)
                   const keyMappings = {
-                      'sound': ['img_001', 'img_sound_02'],
+                      'sound': ['img_001', 'img_sound_02', 'img_sound_01'],
                       'bell': ['img_001'],
                       'ear': ['img_human_ear'],
                       'cell': ['img_plant_cell', 'img_animal_cell'],
+                      'math': ['img_002'],
+                      'graph': ['img_002'],
                       'light': ['img_light_spectrum'],
-                      'work': ['img_work_power'],
-                      'vibrate': ['img_001', 'img_sound_01']
+                      'work': ['img_work_power']
                   };
 
                   for (const [key, ids] of Object.entries(keyMappings)) {
@@ -86,7 +95,7 @@ router.post('/', async (req, res) => {
                   // B. General Keyword Match
                   if (img.keywords.some(k => queryLower.includes(k.toLowerCase())) || 
                       img.title.toLowerCase().includes(queryLower)) {
-                      score += 1.0;
+                      score += 1.5; // Strong boost for any keyword match
                   }
                   
                   return { ...img, score };
@@ -94,9 +103,9 @@ router.post('/', async (req, res) => {
 
              scoredImages.sort((a, b) => b.score - a.score);
              
-             // 3. Selection with high reliability
+             // 3. Robust Selection
              relevantImages = scoredImages
-                .filter(img => img.score > 0.3) // Lowered hurdle to ensure output
+                .filter(img => img.score > 0.3) 
                 .slice(0, 2)
                 .map(img => {
                     console.log(`[IMAGE LOG]: SUCCESS! Returning ${img.title} (Score: ${img.score})`);
@@ -110,7 +119,7 @@ router.post('/', async (req, res) => {
              if (relevantImages.length > 0) {
                 visualContext = "\n\n[USER-PROVIDED DIAGRAMS FOR THIS TOPIC]:\n" + relevantImages.map(img => `- ${img.title}: ${img.description}`).join('\n');
              } else {
-                console.log(`[IMAGE LOG]: NO MATCHES found for: "${queryLower}"`);
+                console.log(`[IMAGE LOG]: NO MATCHES discovered for query context: "${queryLower}"`);
              }
         }
 
