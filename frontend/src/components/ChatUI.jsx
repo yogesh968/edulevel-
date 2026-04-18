@@ -186,7 +186,8 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
                 setMessages([{ role: 'assistant', text: 'History cleared!', images: null }]);
                 }
             }} title="Clear Chat">
-                <Trash2 size={12} />
+                <Trash2 size={16} />
+                <span>Clear Chat</span>
             </button>
         </div>
       </div>

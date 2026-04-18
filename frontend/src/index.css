@@ -1189,11 +1189,12 @@ h1, h2, h3 {
   color: #ef4444;
   border: 1px solid #fecaca;
   border-radius: 12px;
-  width: 44px;
-  height: 44px;
+  padding: 0.6rem 1.2rem;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
 }
