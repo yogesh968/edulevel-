@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
+import { pipeline } from '@xenova/transformers';
 dotenv.config();
 
 const groqClient = new OpenAI({
@@ -7,40 +8,37 @@ const groqClient = new OpenAI({
     baseURL: "https://api.groq.com/openai/v1",
 });
 
-// Compute similarity between a source sentence and a list of candidate sentences via HF API
+let extractor = null;
+
+// Local similarity computation using Transformers.js (Eliminates HF API reliance)
 export async function computeSimilarities(source_sentence, sentences) {
     try {
-        const response = await fetch(
-            "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/sentence-similarity",
-            {
-                headers: {
-                    "Authorization": `Bearer ${process.env.HF_TOKEN}`,
-                    "Content-Type": "application/json",
-                },
-                method: "POST",
-                body: JSON.stringify({
-                    inputs: { source_sentence, sentences }
-                }),
-            }
-        );
-        
-        const responseText = await response.text();
-        let result;
-        try {
-            result = JSON.parse(responseText);
-        } catch (e) {
-            console.error("Non-JSON Response from HF:", responseText.substring(0, 200));
-            throw new Error("Hugging Face API returned an HTML error page. Likely a service timeout or block.");
+        if (!extractor) {
+            console.log("[EMBEDDING]: Initializing local embedding model (Xenova/all-MiniLM-L6-v2)...");
+            extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
         }
 
-        if (!response.ok) {
-            console.error("HF Error:", result);
-            throw new Error(result.error || "Failed to compute similarity");
+        const sourceOutput = await extractor(source_sentence, { pooling: 'mean', normalize: true });
+        const sourceVector = sourceOutput.data;
+
+        const results = [];
+        for (const sentence of sentences) {
+            const targetOutput = await extractor(sentence, { pooling: 'mean', normalize: true });
+            const targetVector = targetOutput.data;
+            
+            // Simple dot product for normalized vectors = cosine similarity
+            let similarity = 0;
+            for (let i = 0; i < sourceVector.length; i++) {
+                similarity += sourceVector[i] * targetVector[i];
+            }
+            results.push(similarity);
         }
-        return result; 
+
+        return results;
     } catch (error) {
-        console.error("Error computing similarities:", error);
-        throw error;
+        console.error("Error computing local similarities:", error);
+        // Fallback to empty scores so doesn't crash
+        return new Array(sentences.length).fill(0);
     }
 }
 
@@ -92,7 +90,7 @@ async function askBLIP(question, base64Image, context = "", retries = 3) {
             
             // Refine the answer using Groq to make it more professional and link it to the PDF context
             const promptText = context 
-            ? `PRO-LEVEL TUTOR MODE:
+            ? `ADAPTIVE TUTOR MODE:
 Document Context:
 ${context}
 
@@ -100,9 +98,9 @@ Current Question:
 ${question}
 
 Instructions: 
-- If this is a simple question, answer in 2-3 clear lines.
-- If the user asks for detail ("explain", "elaborate", "more"), or if the topic is complex, provide a DEEP, STRUCTURED, and ELABORATED explanation with headers.
-- Maintain high structural quality in all responses.`
+- If the question is simple, answer in 1-2 clear lines.
+- If the user asks for detail ("explain", "elaborate", "more"), or if the concept is complex, provide a DEEP, STRUCTURED, and ELABORATED explanation with headers.
+- Always refer to any specific visual evidence found in the image.`
             : question; 
             
             return await askLLM(promptText, question, []);
@@ -125,11 +123,13 @@ export async function askLLM(prompt, question, history = [], image = null) {
          // For standard text queries, continue using Groq for extreme speed and intelligence
          const systemContent = `You are a sophisticated, expert AI tutor similar to GPT-4.
          
-         DYNAMIC RESPONSE RULES:
-         1. FOR SIMPLE IDENTIFICATION (e.g., 'Who am I?', 'What is my name?'): Answer in LESS THAN 10 WORDS. Be blunt and direct.
-         2. FOR BASIC FACTS: Keep it under 2 sentences. No headers. No lists.
-         3. FOR ELABORATION: Only switch to 'Professor Mode' with structured Markdown if the user explicitly asks to 'Explain', 'Details', or 'Elaborate'.
-         4. NO CONVERSATIONAL FILLER: Never start with 'Based on the document' or 'I understand you want...'. Just give the answer.`;
+          DYNAMIC RESPONSE RULES:
+          1. ADAPTIVE RESPONSE LENGTH (STRICT): 
+             - For SIMPLE/SHORT queries (1-5 words): Answer in EXACTLY 1-2 sentences. Do not elaborate.
+             - For COMPLEX/DETAIL requests: Provide a deep, structured explanation with Markdown headers.
+          2. VISUAL SYNERGY: If diagrams are provided in context, refer to them by name.
+          3. ZERO FILLER: No conversational fluff. Start answering immediately.
+          4. EXPERT PERSONA: Professional and elite tone.`;
          
          const chatMessages = [
              { role: "system", content: systemContent },

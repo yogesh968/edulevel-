@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-import { Send, User, Cpu, Image as ImageIcon, FileText, ArrowLeft, Trash2, X, ImagePlus } from 'lucide-react';
+import { Send, User, Cpu, Image as ImageIcon, FileText, ArrowLeft, Trash2, X, ImagePlus, Volume2, Pause, Sparkles, Layers } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import Flashcards from './Flashcards';
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '');
 
@@ -9,13 +10,16 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
   const [messages, setMessages] = useState(() => {
     const saved = localStorage.getItem(`messages_${topicId}`);
     if (saved) return JSON.parse(saved);
-    return [{ role: 'assistant', text: 'Document loaded successfully! Ask me anything about it.', image: null }];
+    return [{ role: 'assistant', text: 'Document loaded successfully! Ask me anything about it.', images: null }];
   });
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [uploadImage, setUploadImage] = useState(null);
   const [uploadPreview, setUploadPreview] = useState(null);
+  const [speakingIdx, setSpeakingIdx] = useState(null);
+  const [flashcards, setFlashcards] = useState(null);
+  const [showCards, setShowCards] = useState(false);
   const messagesEndRef = useRef(null);
   const imageInputRef = useRef(null);
 
@@ -33,37 +37,77 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
     }
   }, [messages, topicId]);
 
+  const handleSpeech = (text, idx) => {
+    if (speakingIdx === idx) {
+      window.speechSynthesis.cancel();
+      setSpeakingIdx(null);
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.onend = () => setSpeakingIdx(null);
+    window.speechSynthesis.speak(utterance);
+    setSpeakingIdx(idx);
+  };
+
+  const handleSummarize = async () => {
+    handleSend("Please provide a concise point-by-point summary of this document.");
+  };
+
+  const handleCreateFlashcards = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API_BASE}/api/chat`, {
+        topicId,
+        question: "Create 5 high-yield study flashcards for this document. Return ONLY a JSON array of objects with 'question' and 'answer' keys. No other text.",
+        history: []
+      });
+
+      const text = response.data.answer;
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const cards = JSON.parse(jsonMatch[0]);
+        setFlashcards(cards);
+        setShowCards(true);
+      } else {
+        alert("Failed to generate structured flashcards. Try again!");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file && file.type.startsWith('image/')) {
-        setUploadImage(file);
-        
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 600; // Optimized for high-speed analysis
-                let width = img.width;
-                let height = img.height;
+      setUploadImage(file);
 
-                if (width > MAX_WIDTH) {
-                    height *= MAX_WIDTH / width;
-                    width = MAX_WIDTH;
-                }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 600;
+          let width = img.width;
+          let height = img.height;
 
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-                
-                // Compress to JPEG for high efficiency
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                setUploadPreview(dataUrl);
-            };
-            img.src = event.target.result;
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          setUploadPreview(dataUrl);
         };
-        reader.readAsDataURL(file);
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -73,15 +117,15 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
     if (imageInputRef.current) imageInputRef.current.value = "";
   };
 
-  const handleSend = async () => {
-    if (!input.trim() && !uploadImage) return;
-    
-    const userMsg = input.trim();
+  const handleSend = async (overrideMsg = null) => {
+    const userMsg = (overrideMsg || input).trim();
+    if (!userMsg && !uploadImage) return;
+
     setInput('');
-    setMessages(prev => [...prev, { 
-        role: 'user', 
-        text: userMsg, 
-        uploadImage: uploadPreview 
+    setMessages(prev => [...prev, {
+      role: 'user',
+      text: userMsg,
+      uploadImage: uploadPreview
     }]);
     setLoading(true);
 
@@ -98,47 +142,53 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
       });
 
       setMessages(prev => [
-        ...prev, 
-        { 
-          role: 'assistant', 
+        ...prev,
+        {
+          role: 'assistant',
           text: response.data.answer,
-          image: response.data.image,
+          images: response.data.images,
           userImage: response.data.userImage
         }
       ]);
     } catch (err) {
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        text: `Error: ${err.response?.data?.details || err.message}` 
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        text: `Error: ${err.response?.data?.details || err.message}`
       }]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleClear = () => {
-    if (window.confirm("Are you sure you want to clear your chat history for this document?")) {
-      const resetMsg = [{ role: 'assistant', text: 'History cleared. Ask me anything about the document!', image: null }];
-      setMessages(resetMsg);
-      localStorage.setItem(`messages_${topicId}`, JSON.stringify(resetMsg));
-    }
-  };
-
   return (
     <div className="card glass-effect chat-container slide-up">
-      {/* Chat Header for PDF Info */}
       <div className="chat-header">
-        <button onClick={onBack} className="back-btn" title="Upload a different document">
+        <button onClick={onBack} className="back-btn" title="Back to Library">
           <ArrowLeft size={18} />
         </button>
         <div className="active-doc-info">
           <FileText size={16} className="doc-icon" />
-          <span className="doc-name">{pdfName || "Document Context Active"}</span>
+          <span className="doc-name">{pdfName || "Current Learning Material"}</span>
         </div>
-        <button className="clear-btn" onClick={handleClear} title="Clear Chat History">
-          <Trash2 size={12} />
-          Clear Chat
-        </button>
+        
+        <div className="header-actions">
+            <button className="tool-btn flash-btn" onClick={handleCreateFlashcards} disabled={loading}>
+                <Layers size={14} />
+                <span>Flashcards</span>
+            </button>
+            <button className="tool-btn summary-btn" onClick={handleSummarize} disabled={loading}>
+                <Sparkles size={14} />
+                <span>Summary</span>
+            </button>
+            <div className="header-divider"></div>
+            <button className="clear-btn" onClick={() => {
+                if (window.confirm("Clear chat?")) {
+                setMessages([{ role: 'assistant', text: 'History cleared!', images: null }]);
+                }
+            }} title="Clear Chat">
+                <Trash2 size={12} />
+            </button>
+        </div>
       </div>
 
       <div className="chat-messages">
@@ -149,29 +199,40 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
             </div>
             <div className="message-content markdown-body">
               <ReactMarkdown>{msg.text}</ReactMarkdown>
+
+              {msg.role === 'assistant' && (
+                <button className="voice-btn" onClick={() => handleSpeech(msg.text, idx)} title="Listen to response">
+                  {speakingIdx === idx ? <Pause size={14} /> : <Volume2 size={14} />}
+                </button>
+              )}
+
               {msg.uploadImage && (
                 <div className="user-upload-preview">
-                    <img src={msg.uploadImage} alt="User upload" onClick={() => setSelectedImage({ filename: null, title: 'Uploaded Image', url: msg.uploadImage, isUser: true })} />
+                  <img src={msg.uploadImage} alt="User upload" onClick={() => setSelectedImage({ filename: null, title: 'Uploaded Image', url: msg.uploadImage, isUser: true })} />
                 </div>
               )}
-              {msg.image && (
-                <div className="message-image-card">
-                  <div className="image-header">
-                    <ImageIcon size={14} />
-                    <span>Relevant Diagram</span>
-                  </div>
-                  <img 
-                    src={`/images/${msg.image.filename}`} 
-                    alt={msg.image.title} 
-                    className="message-image" 
-                    onClick={() => setSelectedImage(msg.image)}
-                  />
-                  <div className="image-title">{msg.image.title}</div>
-                  {msg.image.description && (
-                    <div className="image-description">
-                      {msg.image.description}
+              {msg.images && msg.images.length > 0 && (
+                <div className="message-images-gallery">
+                  {msg.images.map((img, i) => (
+                    <div key={i} className="message-image-card">
+                      <div className="image-header">
+                        <ImageIcon size={14} />
+                        <span>Relevant Diagram</span>
+                      </div>
+                      <img
+                        src={`/images/${img.filename}`}
+                        alt={img.title}
+                        className="message-image"
+                        onClick={() => setSelectedImage(img)}
+                      />
+                      <div className="image-title">{img.title}</div>
+                      {img.description && (
+                        <div className="image-description">
+                          {img.description}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  ))}
                 </div>
               )}
               {msg.userImage && (
@@ -180,81 +241,66 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
                     <ImageIcon size={14} />
                     <span>Analyzed Image</span>
                   </div>
-                  <img 
-                    src={msg.userImage} 
-                    alt="Analyzed content" 
-                    className="message-image" 
+                  <img
+                    src={msg.userImage}
+                    alt="Analyzed content"
+                    className="message-image"
                     onClick={() => setSelectedImage({ url: msg.userImage, title: 'Analyzed Image', isUser: true })}
                   />
+                  <div className="image-title">AI Analysis Context</div>
                 </div>
               )}
             </div>
           </div>
         ))}
-        
-        {/* Image Modal (Lightbox) */}
-        {selectedImage && (
-          <div className="image-modal-overlay" onClick={() => setSelectedImage(null)}>
-            <div className="image-modal-content" onClick={(e) => e.stopPropagation()}>
-              <button className="modal-close" onClick={() => setSelectedImage(null)}>
-                <X size={24} />
-              </button>
-              <img 
-                src={selectedImage.isUser ? selectedImage.url : `/images/${selectedImage.filename}`} 
-                alt={selectedImage.title} 
-                className="modal-image" 
-              />
-              <div className="modal-title">{selectedImage.title}</div>
-            </div>
-          </div>
-        )}
-        {loading && (
-          <div className="message-wrapper assistant">
-            <div className="avatar assistant"><Cpu size={20} /></div>
-            <div className="message-content typing-indicator">
-              <span></span><span></span>
-            </div>
-          </div>
-        )}
         <div ref={messagesEndRef} />
       </div>
 
+      {loading && (
+        <div className="assistant-typing">
+          <span>Smart Tutor is thinking...</span>
+        </div>
+      )}
+
       {uploadPreview && (
         <div className="upload-preview-bar">
-            <div className="preview-container">
-                <img src={uploadPreview} alt="upload preview" />
-                <button onClick={clearUpload}><X size={14} /></button>
-            </div>
+          <div className="preview-container">
+            <img src={uploadPreview} alt="upload preview" />
+            <button onClick={clearUpload}><X size={14} /></button>
+          </div>
         </div>
       )}
 
       <div className="chat-input-area">
-        <input 
-            type="file" 
-            ref={imageInputRef} 
-            onChange={handleImageChange} 
-            accept="image/*" 
-            hidden 
-        />
-        <button 
-            className="image-upload-btn" 
-            onClick={() => imageInputRef.current?.click()}
-            title="Upload Image"
-        >
-            <ImagePlus size={20} />
+        <input type="file" ref={imageInputRef} onChange={handleImageChange} accept="image/*" hidden />
+        <button className="image-upload-btn" onClick={() => imageInputRef.current?.click()} title="Upload Image">
+          <ImagePlus size={20} />
         </button>
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="Ask a question..."
+          placeholder="Ask your smart tutor..."
           disabled={loading}
         />
-        <button onClick={handleSend} disabled={(!input.trim() && !uploadImage) || loading} className="send-btn">
+        <button onClick={() => handleSend()} disabled={(!input.trim() && !uploadImage) || loading} className="send-btn">
           <Send size={20} />
         </button>
       </div>
+
+      {showCards && <Flashcards cards={flashcards} onClose={() => setShowCards(false)} />}
+
+      {/* Image Modal */}
+      {selectedImage && (
+        <div className="image-modal-overlay" onClick={() => setSelectedImage(null)}>
+          <div className="image-modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setSelectedImage(null)}><X size={24} /></button>
+            <img src={selectedImage.isUser ? selectedImage.url : `/images/${selectedImage.filename}`} alt={selectedImage.title} className="modal-image" />
+            <div className="modal-title">{selectedImage.title}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
