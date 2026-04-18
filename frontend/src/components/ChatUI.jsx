@@ -3,6 +3,8 @@ import axios from 'axios';
 import { Send, User, Cpu, Image as ImageIcon, FileText, ArrowLeft, Trash2, X, ImagePlus } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '');
+
 const ChatUI = ({ topicId, pdfName, onBack }) => {
   const [messages, setMessages] = useState(() => {
     const saved = localStorage.getItem(`messages_${topicId}`);
@@ -88,7 +90,6 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
 
     try {
       const historyToPass = messages.slice(-6).map(m => ({ role: m.role, text: m.text }));
-      const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '');
       const response = await axios.post(`${API_BASE}/api/chat`, {
         topicId,
         question: userMsg,
@@ -101,7 +102,8 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
         { 
           role: 'assistant', 
           text: response.data.answer,
-          image: response.data.image
+          image: response.data.image,
+          userImage: response.data.userImage
         }
       ]);
     } catch (err) {
@@ -159,7 +161,7 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
                     <span>Relevant Diagram</span>
                   </div>
                   <img 
-                    src={`/images/${msg.image.filename}`} 
+                    src={`${API_BASE}/images/${msg.image.filename}`} 
                     alt={msg.image.title} 
                     className="message-image" 
                     onClick={() => setSelectedImage(msg.image)}
@@ -170,6 +172,20 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
                       {msg.image.description}
                     </div>
                   )}
+                </div>
+              )}
+              {msg.userImage && (
+                <div className="message-image-card user-provided">
+                  <div className="image-header">
+                    <ImageIcon size={14} />
+                    <span>Analyzed Image</span>
+                  </div>
+                  <img 
+                    src={msg.userImage} 
+                    alt="Analyzed content" 
+                    className="message-image" 
+                    onClick={() => setSelectedImage({ url: msg.userImage, title: 'Analyzed Image', isUser: true })}
+                  />
                 </div>
               )}
             </div>
@@ -184,7 +200,7 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
                 <X size={24} />
               </button>
               <img 
-                src={selectedImage.isUser ? selectedImage.url : `/images/${selectedImage.filename}`} 
+                src={selectedImage.isUser ? selectedImage.url : `${API_BASE}/images/${selectedImage.filename}`} 
                 alt={selectedImage.title} 
                 className="modal-image" 
               />

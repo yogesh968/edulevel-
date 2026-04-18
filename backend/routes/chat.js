@@ -75,7 +75,8 @@ router.post('/', async (req, res) => {
 
         res.json({
             answer,
-            image: bestImage
+            image: bestImage,
+            userImage: image || null // Echo back the user's image if provided
         });
 
     } catch (error) {
