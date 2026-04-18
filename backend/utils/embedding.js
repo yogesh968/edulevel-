@@ -139,29 +139,46 @@ export async function askLLM(prompt, question, history = [], image = null) {
             });
             return response.choices[0].message.content;
          } catch (groqErr) {
-            console.warn("[LLM]: Groq Rate Limit / Error. Falling back to Hugging Face...", groqErr.message);
+            console.warn("[LLM]: Groq failed, trying HF Fallback Chain...", groqErr.message);
             
-            // Priority 2: Hugging Face Fallback (Llama 3 8B Instruct)
-            const hfResponse = await fetch(
-                "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct",
-                {
-                    headers: {
-                        "Authorization": `Bearer ${process.env.HF_TOKEN}`,
-                        "Content-Type": "application/json",
-                    },
-                    method: "POST",
-                    body: JSON.stringify({
-                        inputs: `<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n${systemContent}<|eot_id|>` + 
-                                chatMessages.slice(1).map(m => `<|start_header_id|>${m.role}<|end_header_id|>\n\n${m.content}<|eot_id|>`).join("") +
-                                `<|start_header_id|>assistant<|end_header_id|>\n\n`,
-                        parameters: { max_new_tokens: 1024, return_full_text: false }
-                    }),
-                }
-            );
+            const fallbackModels = [
+                "meta-llama/Meta-Llama-3-8B-Instruct",
+                "mistralai/Mistral-7B-Instruct-v0.2",
+                "google/gemma-1.1-7b-it"
+            ];
 
-            if (!hfResponse.ok) throw new Error("Both Groq and Hugging Face are unavailable.");
-            const hfData = await hfResponse.json();
-            return hfData[0]?.generated_text || "I am processing your request. Please try again in a moment.";
+            for (const model of fallbackModels) {
+                try {
+                    const hfResponse = await fetch(
+                        `https://api-inference.huggingface.co/models/${model}`,
+                        {
+                            headers: {
+                                "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+                                "Content-Type": "application/json",
+                            },
+                            method: "POST",
+                            body: JSON.stringify({
+                                inputs: `<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n${systemContent}<|eot_id|>` + 
+                                        chatMessages.slice(1).map(m => `<|start_header_id|>${m.role}<|end_header_id|>\n\n${m.content}<|eot_id|>`).join("") +
+                                        `<|start_header_id|>assistant<|end_header_id|>\n\n`,
+                                parameters: { max_new_tokens: 512, return_full_text: false }
+                            }),
+                        }
+                    );
+
+                    const hfData = await hfResponse.json();
+                    if (hfResponse.ok) {
+                        return hfData[0]?.generated_text || hfData.generated_text;
+                    } else if (hfData.error?.includes("loading")) {
+                        console.log(`[LLM]: Model ${model} is loading, trying next...`);
+                        continue;
+                    }
+                } catch (e) {
+                    console.error(`[LLM]: Model ${model} failed`, e.message);
+                }
+            }
+
+            throw new Error("Tutor Limit Reached: All AI engines are currently at capacity. Please try again in 1 hour.");
          }
      } catch (error) {
          console.error("Critical Error in askLLM:", error);
