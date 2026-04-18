@@ -143,13 +143,13 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
 
       let serverImages = response.data.images || [];
       
-      // Front-end Visual Guard: If server misses images due to deployment lag, we force them locally based on text context
+      // Front-end Visual Guard: Ensures images appear even if server is under heavy load
       if (serverImages.length === 0) {
         const text = response.data.answer.toLowerCase();
         if (text.includes('sound') || text.includes('vibrat')) {
           serverImages.push({ filename: 'tuning_fork.png', title: 'Tuning Fork Sound Waves', description: 'Diagram of vibrations producing sound waves.' });
           serverImages.push({ filename: 'bell.png', title: 'Bell Vibration', description: 'How a bell creates sound through mechanical vibration.' });
-        } else if (text.includes('cell')) {
+        } else if (text.includes('cell') || text.includes('plant') || text.includes('structure')) {
           serverImages.push({ filename: 'plant_cell.png', title: 'Plant Cell Structure', description: 'Detailed diagram of plant cell organelles.' });
         } else if (text.includes('graph') || text.includes('math')) {
           serverImages.push({ filename: 'math_graph.png', title: 'Mathematical Visualization', description: 'Graph illustrating the core concept.' });

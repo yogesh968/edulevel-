@@ -9,10 +9,10 @@ import os from 'os';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// VERCEL FIX: images.json is bundled with the source, use stable path
+// VERCEL FIX: Match the storage location used in the upload route
 const isVercel = process.env.VERCEL === '1';
 const chunksFilePath = isVercel ? path.join(os.tmpdir(), 'chunks.json') : path.join(__dirname, '..', 'data', 'chunks.json');
-const imagesFilePath = path.join(__dirname, '..', 'data', 'images.json');
+const imagesFilePath = isVercel ? path.join(os.tmpdir(), 'images.json') : path.join(__dirname, '..', 'data', 'images.json');
 
 const router = express.Router();
 
@@ -30,17 +30,17 @@ router.post('/', async (req, res) => {
 
         // 3. Context Retrieval (PDF Chunks)
         const topicChunks = chunksData.filter(c => c.topicId === topicId);
-        const contextText = topicChunks.length > 0 
+        const contextText = topicChunks.length > 0
             ? (await (async () => {
                 const textsToCompare = topicChunks.map(c => c.text);
                 const similarities = await computeSimilarities(question || "image analysis", textsToCompare);
                 const scoredChunks = topicChunks.map((chunk, idx) => ({ ...chunk, similarity: similarities[idx] || 0 }));
                 scoredChunks.sort((a, b) => b.similarity - a.similarity);
                 return scoredChunks.slice(0, 5).map(c => c.text).join('\n\n---\n\n');
-              })())
+            })())
             : "";
 
-        // 4. Image Retrieval Logic (Guaranteed + Contextual Layer)
+        // 4. Image Retrieval Logic (Guaranteed Matching Layer)
         let imagesData = [];
         if (fs.existsSync(imagesFilePath)) {
             imagesData = JSON.parse(fs.readFileSync(imagesFilePath, 'utf8'));
@@ -50,62 +50,53 @@ router.post('/', async (req, res) => {
         let visualContext = "";
 
         if (imagesData.length > 0) {
-             const rawQuestion = (question || "").toLowerCase();
-             // Contextual Search: If the question is a follow-up (short), add context from recent history
-             let searchContext = "";
-             if (rawQuestion.length < 20 && history.length > 0) {
-                 const recentUserMsgs = history.filter(m => m.role === 'user').slice(-2).map(m => m.text).join(" ");
-                 searchContext = recentUserMsgs.toLowerCase();
-             }
-             const queryLower = `${rawQuestion} ${searchContext}`.trim();
-             console.log(`[IMAGE LOG]: Search query (Combined): "${queryLower}"`);
-             
-             // 1. Semantic Search
-             let imgSimilarities = [];
-             try {
+            const queryLower = (question || "").toLowerCase();
+            console.log(`[IMAGE LOG]: Aggressive retrieval for query: "${queryLower}"`);
+
+            // 1. Semantic Search
+            let imgSimilarities = [];
+            try {
                 const imageSentences = imagesData.map(img => `${img.title}. ${img.description} Keywords: ${img.keywords.join(', ')}`);
                 imgSimilarities = await computeSimilarities(queryLower || "diagram", imageSentences);
-             } catch (err) {
-                console.error("[IMAGE LOG]: Semantic search failed, using keywords only.");
+            } catch (err) {
                 imgSimilarities = new Array(imagesData.length).fill(0);
-             }
-             
-             // 2. Multi-Layer Scoring
-             const scoredImages = imagesData.map((img, i) => {
-                  let score = imgSimilarities[i] || 0;
-                  
-                  // A. Guaranteed Keyword Map (Instant Force)
-                  const keyMappings = {
-                      'sound': ['img_001', 'img_sound_02', 'img_sound_01'],
-                      'bell': ['img_001'],
-                      'ear': ['img_human_ear'],
-                      'cell': ['img_plant_cell', 'img_animal_cell'],
-                      'math': ['img_002'],
-                      'graph': ['img_002'],
-                      'light': ['img_light_spectrum'],
-                      'work': ['img_work_power']
-                  };
+            }
 
-                  for (const [key, ids] of Object.entries(keyMappings)) {
-                      if (queryLower.includes(key) && ids.includes(img.id)) {
-                          score += 5.0; // Overwhelming boost
-                      }
-                  }
+            // 2. Multi-Layer Scoring
+            const scoredImages = imagesData.map((img, i) => {
+                let score = imgSimilarities[i] || 0;
 
-                  // B. General Keyword Match
-                  if (img.keywords.some(k => queryLower.includes(k.toLowerCase())) || 
-                      img.title.toLowerCase().includes(queryLower)) {
-                      score += 1.5; // Strong boost for any keyword match
-                  }
-                  
-                  return { ...img, score };
-             });
+                // A. Guaranteed Keyword Map (Instant Boost)
+                const keyMappings = {
+                    'sound': ['img_001', 'img_sound_02'],
+                    'bell': ['img_001'],
+                    'ear': ['img_human_ear'],
+                    'cell': ['img_plant_cell', 'img_animal_cell'],
+                    'light': ['img_light_spectrum'],
+                    'work': ['img_work_power'],
+                    'vibrate': ['img_001', 'img_sound_01']
+                };
 
-             scoredImages.sort((a, b) => b.score - a.score);
-             
-             // 3. Robust Selection
-             relevantImages = scoredImages
-                .filter(img => img.score > 0.3) 
+                for (const [key, ids] of Object.entries(keyMappings)) {
+                    if (queryLower.includes(key) && ids.includes(img.id)) {
+                        score += 5.0; // Overwhelming boost
+                    }
+                }
+
+                // B. General Keyword Match
+                if (img.keywords.some(k => queryLower.includes(k.toLowerCase())) ||
+                    img.title.toLowerCase().includes(queryLower)) {
+                    score += 1.0;
+                }
+
+                return { ...img, score };
+            });
+
+            scoredImages.sort((a, b) => b.score - a.score);
+
+            // 3. Selection with high reliability
+            relevantImages = scoredImages
+                .filter(img => img.score > 0.3) // Lowered hurdle to ensure output
                 .slice(0, 2)
                 .map(img => {
                     console.log(`[IMAGE LOG]: SUCCESS! Returning ${img.title} (Score: ${img.score})`);
@@ -116,11 +107,11 @@ router.post('/', async (req, res) => {
                     };
                 });
 
-             if (relevantImages.length > 0) {
+            if (relevantImages.length > 0) {
                 visualContext = "\n\n[USER-PROVIDED DIAGRAMS FOR THIS TOPIC]:\n" + relevantImages.map(img => `- ${img.title}: ${img.description}`).join('\n');
-             } else {
-                console.log(`[IMAGE LOG]: NO MATCHES discovered for query context: "${queryLower}"`);
-             }
+            } else {
+                console.log(`[IMAGE LOG]: NO MATCHES found for: "${queryLower}"`);
+            }
         }
 
         // 5. Ask LLM with PDF + Visual Context
@@ -134,14 +125,14 @@ router.post('/', async (req, res) => {
 
         res.json({
             answer,
-            images: relevantImages, 
-            userImage: image || null 
+            images: relevantImages,
+            userImage: image || null
         });
 
     } catch (error) {
         console.error("Chat error:", error);
-        res.status(500).json({ 
-            error: "Failed to generate answer", 
+        res.status(500).json({
+            error: "Failed to generate answer",
             details: error.message
         });
     }

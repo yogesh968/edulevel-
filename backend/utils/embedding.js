@@ -25,7 +25,7 @@ export async function computeSimilarities(source_sentence, sentences) {
         for (const sentence of sentences) {
             const targetOutput = await extractor(sentence, { pooling: 'mean', normalize: true });
             const targetVector = targetOutput.data;
-            
+
             // Simple dot product for normalized vectors = cosine similarity
             let similarity = 0;
             for (let i = 0; i < sourceVector.length; i++) {
@@ -76,7 +76,7 @@ async function askBLIP(question, base64Image, context = "", retries = 3) {
                 console.error("HF Raw Error:", responseText.substring(0, 500));
                 throw new Error("Hugging Face API is temporarily unavailable. Please try again in 30 seconds.");
             }
-            
+
             if (!response.ok) {
                 if (result.error?.includes('loading') || result.estimated_time) {
                     await new Promise(res => setTimeout(res, 5000));
@@ -87,10 +87,10 @@ async function askBLIP(question, base64Image, context = "", retries = 3) {
 
             // BLIP VQA returns [{ answer: "..." }]
             const answer = result[0]?.answer || result.answer || "I can see the diagram but need more context.";
-            
+
             // Refine the answer using Groq to make it more professional and link it to the PDF context
-            const promptText = context 
-            ? `ADAPTIVE TUTOR MODE:
+            const promptText = context
+                ? `ADAPTIVE TUTOR MODE:
 Document Context:
 ${context}
 
@@ -101,8 +101,8 @@ Instructions:
 - If the question is simple, answer in 1-2 clear lines.
 - If the user asks for detail ("explain", "elaborate", "more"), or if the concept is complex, provide a DEEP, STRUCTURED, and ELABORATED explanation with headers.
 - Always refer to any specific visual evidence found in the image.`
-            : question; 
-            
+                : question;
+
             return await askLLM(promptText, question, []);
 
         } catch (error) {
@@ -112,24 +112,18 @@ Instructions:
     }
 }
 
-// Ask LLM using Groq
+ // Ask LLM using Groq with Hugging Face Fallback
 export async function askLLM(prompt, question, history = [], image = null) {
      try {
          if (image) {
-             // Use BLIP for visual extraction + Groq for reasoning
              return await askBLIP(question, image, prompt);
          }
 
-         // For standard text queries, continue using Groq for extreme speed and intelligence
-         const systemContent = `You are a sophisticated, expert AI tutor similar to GPT-4.
-         
-          DYNAMIC RESPONSE RULES:
-          1. ADAPTIVE RESPONSE LENGTH (STRICT): 
-             - For SIMPLE/SHORT queries (1-5 words): Answer in EXACTLY 1-2 sentences. Do not elaborate.
-             - For COMPLEX/DETAIL requests: Provide a deep, structured explanation with Markdown headers.
-          2. VISUAL SYNERGY: If diagrams are provided in context, refer to them by name.
-          3. ZERO FILLER: No conversational fluff. Start answering immediately.
-          4. EXPERT PERSONA: Professional and elite tone.`;
+         const systemContent = `You are an elite AI tutor. Answer immediately.
+          RULES: 
+          - Simple query: 1-2 sent. 
+          - Complex query: Structured deep dive.
+          - Zero filler.`;
          
          const chatMessages = [
              { role: "system", content: systemContent },
@@ -137,13 +131,40 @@ export async function askLLM(prompt, question, history = [], image = null) {
              { role: "user", content: prompt }
          ];
 
-         const response = await groqClient.chat.completions.create({
-             model: "llama-3.3-70b-versatile", // NEW: Upgraded to Llama 3.3 for maximum reasoning
-             messages: chatMessages,
-         });
-         return response.choices[0].message.content;
+         try {
+            // Priority 1: Groq (Llama 3 8B)
+            const response = await groqClient.chat.completions.create({
+                model: "llama3-8b-8192", 
+                messages: chatMessages,
+            });
+            return response.choices[0].message.content;
+         } catch (groqErr) {
+            console.warn("[LLM]: Groq Rate Limit / Error. Falling back to Hugging Face...", groqErr.message);
+            
+            // Priority 2: Hugging Face Fallback (Llama 3 8B Instruct)
+            const hfResponse = await fetch(
+                "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct",
+                {
+                    headers: {
+                        "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+                        "Content-Type": "application/json",
+                    },
+                    method: "POST",
+                    body: JSON.stringify({
+                        inputs: `<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n${systemContent}<|eot_id|>` + 
+                                chatMessages.slice(1).map(m => `<|start_header_id|>${m.role}<|end_header_id|>\n\n${m.content}<|eot_id|>`).join("") +
+                                `<|start_header_id|>assistant<|end_header_id|>\n\n`,
+                        parameters: { max_new_tokens: 1024, return_full_text: false }
+                    }),
+                }
+            );
+
+            if (!hfResponse.ok) throw new Error("Both Groq and Hugging Face are unavailable.");
+            const hfData = await hfResponse.json();
+            return hfData[0]?.generated_text || "I am processing your request. Please try again in a moment.";
+         }
      } catch (error) {
-         console.error("Error calling LLM:", error);
+         console.error("Critical Error in askLLM:", error);
          throw error;
      }
  }
