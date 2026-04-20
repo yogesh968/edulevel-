@@ -45,143 +45,167 @@ export async function computeSimilarities(source_sentence, sentences) {
 // Analyze image using Salesforce BLIP VQA
 async function askBLIP(question, base64Image, context = "", retries = 3) {
     const base64Data = base64Image.split('base64,')[1] || base64Image;
+    const visionModels = [
+        "Salesforce/blip-vqa-base",
+        "Salesforce/blip-vqa-capfilt-large"
+    ];
 
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await fetch(
-                "https://api-inference.huggingface.co/models/Salesforce/blip-vqa-base",
-                {
-                    headers: {
-                        "Authorization": `Bearer ${process.env.HF_TOKEN}`,
-                        "Content-Type": "application/json",
-                    },
-                    method: "POST",
-                    body: JSON.stringify({
-                        inputs: {
-                            image: base64Data,
-                            text: question || "Describe this image."
-                        },
-                        options: {
-                            wait_for_model: true
-                        }
-                    }),
-                }
-            );
-
-            const responseText = await response.text();
-            let result;
+    for (const model of visionModels) {
+        for (let i = 0; i < retries; i++) {
             try {
-                result = JSON.parse(responseText);
-            } catch (e) {
-                console.error("HF Raw Error:", responseText.substring(0, 500));
-                throw new Error("Hugging Face API is temporarily unavailable. Please try again in 30 seconds.");
-            }
+                const response = await fetch(
+                    `https://api-inference.huggingface.co/models/${model}`,
+                    {
+                        headers: {
+                            "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+                            "Content-Type": "application/json",
+                        },
+                        method: "POST",
+                        body: JSON.stringify({
+                            inputs: {
+                                image: base64Data,
+                                text: question || "Describe this image."
+                            },
+                            options: {
+                                wait_for_model: true
+                            }
+                        }),
+                    }
+                );
 
-            if (!response.ok) {
-                if (result.error?.includes('loading') || result.estimated_time) {
-                    await new Promise(res => setTimeout(res, 5000));
-                    continue;
+                const responseText = await response.text();
+                let result;
+                try {
+                    result = JSON.parse(responseText);
+                } catch (e) {
+                    console.error(`HF Raw Error (${model}):`, responseText.substring(0, 500));
+                    throw new Error("Hugging Face API is temporarily unavailable.");
                 }
-                throw new Error(result.error || "Vision API Error");
-            }
 
-            // BLIP VQA returns [{ answer: "..." }]
-            const answer = result[0]?.answer || result.answer || "I can see the diagram but need more context.";
+                if (!response.ok) {
+                    if (result.error?.includes('loading') || result.estimated_time) {
+                        console.log(`[VISION]: Model ${model} is loading, waiting 5s...`);
+                        await new Promise(res => setTimeout(res, 5000));
+                        continue;
+                    }
+                    throw new Error(result.error || "Vision API Error");
+                }
 
-            // Refine the answer using Groq to make it more professional and link it to the PDF context
-            const promptText = context
-                ? `ADAPTIVE TUTOR MODE:
-Document Context:
-${context}
+                const answer = result[0]?.answer || result.answer || "I can see the diagram but need more context.";
 
-Current Question:
+                const promptText = `VISION ANALYSIS: The student provided an image. My visual analysis shows: "${answer}"
+
+${context ? `DOCUMENT CONTEXT FROM PDF:\n${context}\n\n` : ""}STUDENT QUESTION:
 ${question}
 
 Instructions: 
+- Use the VISION ANALYSIS above to answer the STUDENT QUESTION.
 - If the question is simple, answer in 1-2 clear lines.
-- If the user asks for detail ("explain", "elaborate", "more"), or if the concept is complex, provide a DEEP, STRUCTURED, and ELABORATED explanation with headers.
-- Always refer to any specific visual evidence found in the image.`
-                : question;
+- If the concept is complex, provide a DEEP, STRUCTURED, and ELABORATED explanation with headers.
+- Always refer to the visual evidence found in the image analysis.`;
 
-            return await askLLM(promptText, question, []);
+                return await askLLM(promptText, question, []);
 
-        } catch (error) {
-            if (i === retries - 1) throw error;
-            await new Promise(res => setTimeout(res, 3000));
+            } catch (error) {
+                console.warn(`[VISION]: Model ${model} failed (Attempt ${i+1}):`, error.message);
+                if (i === retries - 1) break; // Move to next model
+                await new Promise(res => setTimeout(res, 3000));
+            }
         }
     }
+    throw new Error("Tutor Vision Engine Limit Reached. Please try again in 1 hour.");
 }
 
  // Ask LLM using Groq with Hugging Face Fallback
 export async function askLLM(prompt, question, history = [], image = null) {
-     try {
-         if (image) {
-             return await askBLIP(question, image, prompt);
-         }
+    try {
+        if (image) {
+            return await askBLIP(question, image, prompt);
+        }
 
-         const systemContent = `You are an elite AI tutor. Answer immediately.
-          RULES: 
-          - Simple query: 1-2 sent. 
-          - Complex query: Structured deep dive.
-          - Zero filler.`;
-         
-         const chatMessages = [
-             { role: "system", content: systemContent },
-             ...history.map(msg => ({ role: msg.role, content: msg.text })),
-             { role: "user", content: prompt }
-         ];
+        const systemContent = `You are an elite AI tutor. Answer immediately.
+         RULES: 
+         - Simple query: 1-2 sent. 
+         - Complex query: Structured deep dive.
+         - Zero filler.`;
+        
+        const chatMessages = [
+            { role: "system", content: systemContent },
+            ...history.map(msg => ({ role: msg.role, content: msg.text })),
+            { role: "user", content: prompt }
+        ];
 
-         try {
-            // Priority 1: Groq (Llama 3 8B)
-            const response = await groqClient.chat.completions.create({
-                model: "llama3-8b-8192", 
-                messages: chatMessages,
-            });
-            return response.choices[0].message.content;
-         } catch (groqErr) {
-            console.warn("[LLM]: Groq failed, trying HF Fallback Chain...", groqErr.message);
-            
-            const fallbackModels = [
-                "meta-llama/Meta-Llama-3-8B-Instruct",
-                "mistralai/Mistral-7B-Instruct-v0.2",
-                "google/gemma-1.1-7b-it"
-            ];
-
-            for (const model of fallbackModels) {
-                try {
-                    const hfResponse = await fetch(
-                        `https://api-inference.huggingface.co/models/${model}`,
-                        {
-                            headers: {
-                                "Authorization": `Bearer ${process.env.HF_TOKEN}`,
-                                "Content-Type": "application/json",
-                            },
-                            method: "POST",
-                            body: JSON.stringify({
-                                inputs: `<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n${systemContent}<|eot_id|>` + 
-                                        chatMessages.slice(1).map(m => `<|start_header_id|>${m.role}<|end_header_id|>\n\n${m.content}<|eot_id|>`).join("") +
-                                        `<|start_header_id|>assistant<|end_header_id|>\n\n`,
-                                parameters: { max_new_tokens: 512, return_full_text: false }
-                            }),
-                        }
-                    );
-
-                    const hfData = await hfResponse.json();
-                    if (hfResponse.ok) {
-                        return hfData[0]?.generated_text || hfData.generated_text;
-                    } else if (hfData.error?.includes("loading")) {
-                        console.log(`[LLM]: Model ${model} is loading, trying next...`);
-                        continue;
-                    }
-                } catch (e) {
-                    console.error(`[LLM]: Model ${model} failed`, e.message);
+        // 1. Try Groq (Primary & Secondaries)
+        const groqModels = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "mixtral-8x7b-32768", "gemma2-9b-it"];
+        for (const model of groqModels) {
+            try {
+                const response = await groqClient.chat.completions.create({
+                    model: model, 
+                    messages: chatMessages,
+                    max_tokens: 1024
+                });
+                if (response?.choices?.[0]?.message?.content) {
+                    return response.choices[0].message.content;
                 }
+            } catch (e) {
+                console.warn(`[LLM]: Groq model ${model} failed:`, e.message);
             }
+        }
 
-            throw new Error("Tutor Limit Reached: All AI engines are currently at capacity. Please try again in 1 hour.");
-         }
-     } catch (error) {
-         console.error("Critical Error in askLLM:", error);
-         throw error;
-     }
- }
+        // 2. Try Hugging Face Fallbacks
+        console.warn("[LLM]: All Groq models failed or unauthorized. Trying Hugging Face...");
+        const fallbackModels = [
+            "mistralai/Mistral-7B-Instruct-v0.2",
+            "HuggingFaceH4/zephyr-7b-beta",
+            "microsoft/Phi-3-mini-4k-instruct",
+            "google/gemma-2-2b-it",
+            "Tiiuae/falcon-7b-instruct"
+        ];
+
+        for (const model of fallbackModels) {
+            try {
+                console.log(`[LLM]: Attempting HF fallback with ${model}...`);
+                const hfResponse = await fetch(
+                    `https://api-inference.huggingface.co/models/${model}`,
+                    {
+                        headers: {
+                            "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+                            "Content-Type": "application/json",
+                        },
+                        method: "POST",
+                        body: JSON.stringify({
+                            inputs: `<|system|>\n${systemContent}</s>\n<|user|>\n${prompt}</s>\n<|assistant|>`,
+                            parameters: { max_new_tokens: 512, return_full_text: false }
+                        }),
+                    }
+                );
+
+                const responseText = await hfResponse.text();
+                let hfData;
+                try {
+                    hfData = JSON.parse(responseText);
+                } catch (parseErr) {
+                    console.warn(`[LLM]: Model ${model} returned non-JSON:`, responseText.substring(0, 100));
+                    continue;
+                }
+
+                if (hfResponse.ok) {
+                    const text = hfData[0]?.generated_text || hfData.generated_text;
+                    if (text) return text;
+                } else {
+                    console.warn(`[LLM]: HF Model ${model} returned ${hfResponse.status}:`, hfData.error || "Unknown");
+                    if (hfData.error?.includes("loading")) {
+                        await new Promise(res => setTimeout(res, 2000));
+                    }
+                }
+            } catch (e) {
+                console.error(`[LLM]: HF Model ${model} error:`, e.message);
+            }
+        }
+
+        throw new Error("Tutor Limit Reached: All AI engines are currently at capacity. Please try again in 1 hour.");
+    } catch (error) {
+        console.error("Critical Error in askLLM:", error.message);
+        throw error;
+    }
+}
