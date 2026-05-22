@@ -10,7 +10,6 @@ const groqClient = new OpenAI({
 
 let extractor = null;
 
-// Local similarity computation using Transformers.js (Eliminates HF API reliance)
 export async function computeSimilarities(source_sentence, sentences) {
     try {
         if (!extractor) {
@@ -26,8 +25,7 @@ export async function computeSimilarities(source_sentence, sentences) {
             const targetOutput = await extractor(sentence, { pooling: 'mean', normalize: true });
             const targetVector = targetOutput.data;
 
-            // Simple dot product for normalized vectors = cosine similarity
-            let similarity = 0;
+                        let similarity = 0;
             for (let i = 0; i < sourceVector.length; i++) {
                 similarity += sourceVector[i] * targetVector[i];
             }
@@ -37,12 +35,10 @@ export async function computeSimilarities(source_sentence, sentences) {
         return results;
     } catch (error) {
         console.error("Error computing local similarities:", error);
-        // Fallback to empty scores so doesn't crash
-        return new Array(sentences.length).fill(0);
+                return new Array(sentences.length).fill(0);
     }
 }
 
-// Analyze image using Salesforce BLIP VQA
 async function askBLIP(question, base64Image, context = "", retries = 3) {
     const base64Data = base64Image.split('base64,')[1] || base64Image;
     const visionModels = [
@@ -108,16 +104,14 @@ Instructions:
 
             } catch (error) {
                 console.warn(`[VISION]: Model ${model} failed (Attempt ${i+1}):`, error.message);
-                if (i === retries - 1) break; // Move to next model
-                await new Promise(res => setTimeout(res, 3000));
+                if (i === retries - 1) break;                 await new Promise(res => setTimeout(res, 3000));
             }
         }
     }
     throw new Error("Tutor Vision Engine Limit Reached. Please try again in 1 hour.");
 }
 
- // Ask LLM using Groq with Hugging Face Fallback
-export async function askLLM(prompt, question, history = [], image = null) {
+ export async function askLLM(prompt, question, history = [], image = null) {
     try {
         if (image) {
             return await askBLIP(question, image, prompt);

@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import uploadRoutes from './routes/upload.js';
 import chatRoutes from './routes/chat.js';
+import authRoutes from './routes/auth.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -24,34 +25,27 @@ app.use(cors({
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
-// Set Security Headers (Fixes the Font/CSP issue)
 app.use((req, res, next) => {
     res.setHeader("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval'; img-src * data:; font-src * https://fonts.gstatic.com;");
     next();
 });
 
-// Root Route (Fixes the 'Cannot GET /' 404 error)
 app.get('/', (req, res) => {
     res.send('Edulevel+ Backend is Running Successfully 🚀');
 });
 
-// Handle Favicon requests
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
-// Universal Route Handlers (Matches both /api/chat and /chat automatically)
 app.use(['/api/upload', '/upload'], uploadRoutes);
 app.use(['/api/chat', '/chat'], chatRoutes);
+app.use(['/api/auth', '/auth'], authRoutes);
 
-// Health Check for debugging
 app.get('/api/health', (req, res) => res.json({ status: "API is online and matching routes" }));
 
-// Simple endpoint to serve images locally if needed
 app.use('/images', express.static(path.join(__dirname, 'public', 'images')));
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
 
-// Essential for Vercel Serverless environment
 export default app;
-// API versioning placeholder

@@ -1,10 +1,37 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { Send, User, Cpu, Image as ImageIcon, FileText, ArrowLeft, Trash2, X, ImagePlus, Volume2, Pause, Sparkles, Layers } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import Flashcards from './Flashcards';
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '');
+
+// Handles slow image loading with spinner
+const LazyImage = ({ src, alt, onClick }) => {
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
+
+  if (error) return <div style={{padding:'1rem',color:'#999',fontSize:'0.8rem',textAlign:'center'}}>⚠️ Image unavailable</div>;
+  return (
+    <div style={{position:'relative'}}>
+      {!loaded && (
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'2rem',gap:'0.6rem'}}>
+          <div style={{width:32,height:32,borderRadius:'50%',border:'3px solid #ede9fe',borderTop:'3px solid #6366f1',animation:'spin 0.8s linear infinite'}} />
+          <span style={{fontSize:'0.72rem',color:'#94a3b8',fontWeight:500,letterSpacing:'0.03em'}}>Generating visual…</span>
+        </div>
+      )}
+      <img
+        src={src}
+        alt={alt}
+        className="message-image"
+        style={{ display: loaded ? 'block' : 'none' }}
+        onLoad={() => setLoaded(true)}
+        onError={() => setError(true)}
+        onClick={onClick}
+      />
+    </div>
+  );
+};
 
 const ChatUI = ({ topicId, pdfName, onBack }) => {
   const [messages, setMessages] = useState(() => {
@@ -141,20 +168,7 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
         image: currentImage
       });
 
-      let serverImages = response.data.images || [];
-      
-      // Front-end Visual Guard: Ensures images appear even if server is under heavy load
-      if (serverImages.length === 0) {
-        const text = response.data.answer.toLowerCase();
-        if (text.includes('sound') || text.includes('vibrat')) {
-          serverImages.push({ filename: 'tuning_fork.png', title: 'Tuning Fork Sound Waves', description: 'Diagram of vibrations producing sound waves.' });
-          serverImages.push({ filename: 'bell.png', title: 'Bell Vibration', description: 'How a bell creates sound through mechanical vibration.' });
-        } else if (text.includes('cell') || text.includes('plant') || text.includes('structure')) {
-          serverImages.push({ filename: 'plant_cell.png', title: 'Plant Cell Structure', description: 'Detailed diagram of plant cell organelles.' });
-        } else if (text.includes('graph') || text.includes('math')) {
-          serverImages.push({ filename: 'math_graph.png', title: 'Mathematical Visualization', description: 'Graph illustrating the core concept.' });
-        }
-      }
+      const serverImages = response.data.images || [];
 
       setMessages(prev => [
         ...prev,
@@ -235,11 +249,10 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
                         <ImageIcon size={14} />
                         <span>Relevant Diagram</span>
                       </div>
-                      <img
-                        src={img.filename.startsWith('http') ? img.filename : `/images/${img.filename}`}
+                      <LazyImage
+                        src={img.url}
                         alt={img.title}
-                        className="message-image"
-                        onClick={() => setSelectedImage({ ...img, url: img.filename.startsWith('http') ? img.filename : `/images/${img.filename}` })}
+                        onClick={() => setSelectedImage({ ...img })}
                       />
                       <div className="image-title">{img.title}</div>
                       {img.description && (
@@ -273,8 +286,13 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
       </div>
 
       {loading && (
-        <div className="assistant-typing">
-          <span>Smart Tutor is thinking...</span>
+        <div className="message-wrapper assistant">
+          <div className="avatar assistant"><Cpu size={20} /></div>
+          <div className="thinking-bubble">
+            <div className="thinking-bar" />
+            <div className="thinking-bar" />
+            <div className="thinking-bar" />
+          </div>
         </div>
       )}
 
@@ -301,19 +319,18 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
           disabled={loading}
         />
         <button onClick={() => handleSend()} disabled={(!input.trim() && !uploadImage) || loading} className="send-btn">
-          <Send size={20} />
+          {loading ? <div className="send-spinner" /> : <Send size={20} />}
         </button>
       </div>
 
       {showCards && <Flashcards cards={flashcards} onClose={() => setShowCards(false)} />}
 
-      {/* Image Modal */}
       {selectedImage && (
         <div className="image-modal-overlay" onClick={() => setSelectedImage(null)}>
           <div className="image-modal-content" onClick={(e) => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setSelectedImage(null)}><X size={24} /></button>
             <img 
-              src={selectedImage.isUser ? selectedImage.url : (selectedImage.filename?.startsWith('http') ? selectedImage.filename : `/images/${selectedImage.filename}`)} 
+              src={selectedImage.url} 
               alt={selectedImage.title} 
               className="modal-image" 
             />
