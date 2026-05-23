@@ -38,14 +38,17 @@ app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 app.use(['/api/upload', '/upload'], uploadRoutes);
 app.use(['/api/chat', '/chat'], chatRoutes);
-app.use(['/api/auth', '/auth'], authRoutes);
+app.use('/auth', authRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: "API is online and matching routes" }));
 
 app.use('/images', express.static(path.join(__dirname, 'public', 'images')));
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+// Only start HTTP server in local dev — Vercel uses export default
+if (!process.env.VERCEL) {
+    app.listen(PORT, () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+    });
+}
 
 export default app;

@@ -3,11 +3,28 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const usersFile = path.join(__dirname, '..', 'data', 'users.json');
+
+const isVercel = process.env.VERCEL === '1';
+const usersFile = isVercel
+    ? path.join(os.tmpdir(), 'users.json')
+    : path.join(__dirname, '..', 'data', 'users.json');
+
+// On Vercel: seed /tmp/users.json from bundled data if not yet present
+if (isVercel && !fs.existsSync(usersFile)) {
+    const bundled = path.join(__dirname, '..', 'data', 'users.json');
+    try {
+        const seed = fs.existsSync(bundled) ? fs.readFileSync(bundled, 'utf8') : '[]';
+        fs.writeFileSync(usersFile, seed);
+    } catch (e) {
+        fs.writeFileSync(usersFile, '[]');
+    }
+}
+
 const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'edulevel_secret_key';
