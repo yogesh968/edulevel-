@@ -1,4 +1,4 @@
-# Edulevel+
+# Lemon Tea Studio
 
 An AI-powered tutoring platform that lets you upload a PDF and have a real conversation with it. Ask questions, request diagrams, and get structured explanations — all grounded in your own document.
 
