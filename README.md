@@ -1,69 +1,48 @@
-# Lemon Tea Studio
+# Edulevel+
 
-An AI-powered tutoring platform that lets you upload a PDF and have a real conversation with it. Ask questions, request diagrams, and get structured explanations — all grounded in your own document.
+A document-grounded AI tutoring platform. Upload any PDF and have a real conversation with it — ask questions, generate diagrams, create flashcards, and get structured explanations, all pulled directly from your document.
 
 ---
 
 ## What it does
 
-You drop in a PDF — a textbook chapter, lecture notes, anything — and the app processes it into searchable chunks. From there you can ask questions in plain English and get answers that are actually pulled from your document, not hallucinated from thin air.
-
-It also has a vision layer. Upload an image alongside your question and the AI can analyze it. Ask for a diagram and it generates one on the fly using Pollinations AI.
-
-The response style adapts automatically — short factual questions get short answers, complex ones get structured breakdowns with headers and bullet points.
-
----
-
-## Tech stack
-
-**Frontend** — React + Vite, plain CSS (no UI library)
-
-**Backend** — Node.js + Express
-
-**AI / Models**
-- [Llama 3.3 70B](https://groq.com) via Groq for text reasoning
-- [Salesforce BLIP VQA](https://huggingface.co/Salesforce/blip-vqa-base) via Hugging Face for image understanding
-- [Pollinations AI](https://pollinations.ai) for diagram generation
-
-**RAG pipeline** — PDF → `pdf-parse` → text chunking → cosine similarity search → top-5 chunks passed to LLM as context
+- Upload a PDF (textbook chapter, lecture notes, research paper)
+- Ask questions in plain English — answers come from your document, not from the model's general knowledge
+- Ask for a diagram — one gets generated on the fly via Pollinations AI
+- Upload an image alongside a question — the AI analyzes it using BLIP VQA
+- Generate flashcards or a full summary of the document in one click
+- Chat history persists per session via localStorage
+- Response style adapts — short questions get short answers, complex ones get structured breakdowns
 
 ---
 
-## Project structure
+## Screenshots
 
-```
-edulevel-/
-├── backend/
-│   ├── routes/
-│   │   ├── upload.js     # PDF parsing, chunking, storage
-│   │   ├── chat.js       # RAG retrieval + LLM call
-│   │   └── auth.js       # Auth routes (integration pending)
-│   ├── utils/
-│   │   ├── embedding.js      # Cosine similarity + Groq LLM wrapper
-│   │   └── textSplitting.js  # Chunk text into ~400 token pieces
-│   └── server.js
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── Upload.jsx    # PDF upload UI
-│   │   │   ├── ChatUI.jsx    # Chat interface
-│   │   │   └── Flashcards.jsx
-│   │   ├── context/
-│   │   │   └── AuthContext.jsx
-│   │   └── App.jsx
-│   └── vite.config.js
-```
+> Upload screen
+
+![Upload Screen](docs/screenshots/upload.png)
+
+> Chat interface with diagram generation
+
+![Chat UI](docs/screenshots/chat.png)
+
+> Flashcard modal
+
+![Flashcards](docs/screenshots/flashcards.png)
+
+*(Add your own screenshots to `docs/screenshots/` to populate these)*
 
 ---
 
-## Getting started
+## Setup
 
 ### Prerequisites
-- Node.js v18+
-- A [Groq API key](https://console.groq.com)
-- A [Hugging Face token](https://huggingface.co/settings/tokens)
 
-### Setup
+- Node.js v18+
+- [Groq API key](https://console.groq.com) — free tier works
+- [Hugging Face token](https://huggingface.co/settings/tokens) — needed for BLIP image analysis and LLM fallbacks
+
+### Install
 
 ```bash
 # Backend
@@ -74,6 +53,8 @@ npm install
 cd ../frontend
 npm install
 ```
+
+### Environment
 
 Create a `.env` file inside `backend/`:
 
@@ -93,26 +74,122 @@ cd backend && npm start
 cd frontend && npm run dev
 ```
 
-Frontend runs on `http://localhost:5173`, backend on `http://localhost:3003`. The Vite proxy forwards all `/api` requests to the backend automatically.
+- Frontend → `http://localhost:5173`
+- Backend → `http://localhost:3003`
+- Vite proxies all `/api/*` requests to the backend automatically — no CORS issues in dev
 
 ---
 
-## How the RAG pipeline works
+## Architecture
 
-1. PDF is uploaded and parsed with `pdf-parse`
-2. Extracted text is split into ~400-word chunks
-3. Each chunk is stored with a `topicId` tied to the session
-4. On each question, cosine similarity is computed between the query and all chunks
-5. Top 5 most relevant chunks are injected into the LLM prompt as context
-6. Llama 3.3 generates an answer grounded in those chunks
+```
+Browser (React + Vite)
+        │
+        │  /api/*  (Vite proxy in dev, direct in prod)
+        ▼
+Express Server (Node.js)
+        │
+        ├── POST /api/upload
+        │       └── multer → pdf-parse → textSplitting → chunks.json
+        │
+        └── POST /api/chat
+                ├── Load chunks for topicId
+                ├── computeSimilarities (Xenova/all-MiniLM-L6-v2, local)
+                ├── Top-5 chunks → LLM prompt
+                ├── Image request? → Pollinations AI (diagram URL)
+                └── Image uploaded? → BLIP VQA (Hugging Face) → LLM
+```
+
+### RAG pipeline step by step
+
+1. PDF uploaded → `pdf-parse` extracts raw text
+2. `textSplitting.js` splits text into ~400-word chunks
+3. Each chunk stored in `chunks.json` with a `topicId` (UUID) tied to the session
+4. On each question, `Xenova/all-MiniLM-L6-v2` runs locally to embed both the query and all chunks
+5. Cosine similarity computed — top 5 chunks selected
+6. Those chunks injected into the Llama 3.3 prompt as `[DOCUMENT CONTEXT]`
+7. LLM answers strictly from that context
+
+### LLM fallback chain
+
+The app never hard-fails on a single model. If Groq is down or rate-limited:
+
+```
+Groq: llama-3.1-8b-instant
+  → llama-3.3-70b-versatile
+  → mixtral-8x7b-32768
+  → gemma2-9b-it
+    → HF: Mistral-7B-Instruct
+    → HF: Zephyr-7B
+    → HF: Phi-3-mini
+    → HF: Gemma-2-2b
+```
 
 ---
 
-## Notes
+## Project structure
 
-- Auth is scaffolded but bypassed for now — the app opens directly to the main page. Auth integration is planned.
-- On Vercel, file storage uses `/tmp` since the filesystem is ephemeral.
-- Password-protected or image-only PDFs won't work — the text must be extractable.
+```
+edulevel-/
+├── backend/
+│   ├── routes/
+│   │   ├── upload.js         # PDF parsing, chunking, storage
+│   │   ├── chat.js           # RAG retrieval, diagram detection, LLM call
+│   │   └── auth.js           # Auth routes (scaffolded, not active)
+│   ├── utils/
+│   │   ├── embedding.js      # Local embeddings + Groq/HF LLM wrapper
+│   │   └── textSplitting.js  # Splits text into ~400-word chunks
+│   ├── data/                 # chunks.json stored here (local dev)
+│   └── server.js
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Upload.jsx    # PDF upload UI with drag & drop
+│   │   │   ├── ChatUI.jsx    # Chat, image upload, voice, flashcards
+│   │   │   └── Flashcards.jsx
+│   │   ├── context/
+│   │   │   └── AuthContext.jsx   # Auth context (bypassed for now)
+│   │   ├── pages/
+│   │   │   ├── Login.jsx
+│   │   │   └── Signup.jsx
+│   │   └── App.jsx
+│   └── vite.config.js
+```
+
+---
+
+## Design decisions
+
+**No vector database** — cosine similarity is computed in-memory using a local transformer model (`all-MiniLM-L6-v2` via `@xenova/transformers`). This keeps the stack simple and free — no Pinecone, no Weaviate, no external embedding API calls.
+
+**No UI library** — the entire frontend is plain CSS. Keeps bundle size small and gives full control over the design without fighting a component library.
+
+**Chunk size of 400 words** — small enough to stay within LLM context limits, large enough to preserve sentence coherence and topic continuity within each chunk.
+
+**Top-5 chunks** — passing more than 5 chunks starts to dilute the prompt and push less relevant content into the context window. 5 was the sweet spot in testing.
+
+**Pollinations AI for diagrams** — zero API key required, generates on-demand educational diagrams from a text prompt. The backend waits up to 30s polling for the image to be ready before returning the URL.
+
+**Groq as primary LLM** — Groq's inference speed is significantly faster than standard OpenAI-compatible endpoints, which matters for a tutoring UX where response latency is noticeable.
+
+**Auth bypassed, not removed** — the full auth scaffold (Login, Signup, AuthContext, auth routes) is kept in the codebase but bypassed with a mock guest user. This means auth can be wired in without restructuring anything.
+
+---
+
+## Assumptions
+
+- The PDF must contain extractable text. Password-protected PDFs and image-only scans (no OCR layer) will be rejected with a clear error.
+- One session = one PDF. The `topicId` is a UUID generated per upload and stored in localStorage. Uploading a new PDF starts a fresh session.
+- Chunks from all sessions accumulate in `chunks.json`. There is no cleanup mechanism yet — on Vercel this is fine since `/tmp` is wiped between cold starts, but in long-running local dev the file will grow.
+- The app is single-user for now. Auth is scaffolded but not enforced, so there is no per-user data isolation.
+- Hugging Face free tier models can be slow to respond (cold start ~20s). The BLIP vision model has retry logic built in to handle this.
+
+---
+
+## Deployment notes
+
+- **Vercel** — both `backend/vercel.json` and `frontend/vercel.json` are configured. File storage automatically switches to `/tmp` when `VERCEL=1` is set.
+- **Local** — files are stored in `backend/data/` and `backend/uploads/` (both gitignored).
 
 ---
 
