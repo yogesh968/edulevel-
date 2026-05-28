@@ -1266,6 +1266,10 @@ h1, h2, h3 {
     width: 100%;
 }
 
+.upload-box-wrapper {
+    margin-bottom: 1.5rem;
+}
+
 /* ===== AUTH PAGES ===== */
 .auth-page {
   min-height: 100vh;

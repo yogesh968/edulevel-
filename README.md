@@ -1,108 +1,119 @@
-# 🪐 Edulevel+ | Next-Gen AI Tutor
+# Edulevel+
 
-[![Tech Stack](https://img.shields.io/badge/Stack-React%20%7C%20Node.js%20%7C%20Groq%20%7C%20HF-blueviolet)](https://github.com/yogesh968/edulevel-)
-[![AI Model](https://img.shields.io/badge/LLM-Llama%203.3%20(70B)-orange)](https://groq.com)
-[![Vision](https://img.shields.io/badge/Vision-Salesforce%20BLIP-green)](https://huggingface.co/Salesforce/blip-vqa-base)
-
-**Edulevel+** is a sophisticated, multimodal AI tutoring platform that transforms stagnant PDF textbooks into interactive, high-intelligence learning experiences. By combining **RAG (Retrieval-Augmented Generation)** with **Vision AI**, students can chat with their documents and analyze complex diagrams in real-time.
+An AI-powered tutoring platform that lets you upload a PDF and have a real conversation with it. Ask questions, request diagrams, and get structured explanations — all grounded in your own document.
 
 ---
 
-## ✨ Core Features
+## What it does
 
-### 🧠 High-Intelligence Reasoning
-Powered by **Llama 3.3 (70B) via Groq**, the tutor provides world-class educational explanations. It features a "Smart-Switch" logic:
-- **Crisp Mode:** Short, 2-3 sentence answers for simple facts.
-- **Professor Mode:** Deep, multi-section elaborations with headers for complex topics.
+You drop in a PDF — a textbook chapter, lecture notes, anything — and the app processes it into searchable chunks. From there you can ask questions in plain English and get answers that are actually pulled from your document, not hallucinated from thin air.
 
-### 👁️ Multimodal Vision Analysis
-Integrated with **Salesforce BLIP VQA**, the platform can "see" your uploads.
-- Analyze diagrams, charts, and handwritten notes.
-- Direct question-answering based on visual pixels.
-- Automated image compression (WebP/JPEG) for instant analysis.
+It also has a vision layer. Upload an image alongside your question and the AI can analyze it. Ask for a diagram and it generates one on the fly using Pollinations AI.
 
-### 📚 PDF Context-Awareness (RAG)
-Unlike standard chatbots, Edulevel+ uses your documents as a "Source of Truth":
-- Fast text-chunking and semantic search.
-- Contextual grounding to prevent AI hallucinations.
-- Textbook-style rendering of relevant diagrams.
-
-### 💎 Premium Glassmorphic UI
-- **Responsive Design:** Optimized for Mobile and Desktop.
-- **Rich Aesthetics:** Dark-mode focus with vibrant gradients and smooth micro-animations.
-- **Smart Lightbox:** View textbook diagrams in high definition.
+The response style adapts automatically — short factual questions get short answers, complex ones get structured breakdowns with headers and bullet points.
 
 ---
 
-## 🛠️ Technical Architecture
+## Tech stack
 
-```mermaid
-graph TD
-    A[User PDF/Image] --> B[Processing Engine]
-    B --> C{Retrieval Type}
-    C -->|Text Path| D[Vector Search]
-    C -->|Vision Path| E[BLIP VQA Analysis]
-    D --> F[Llama 3.3 Refinement]
-    E --> F
-    F --> G[Structured Educational Output]
+**Frontend** — React + Vite, plain CSS (no UI library)
+
+**Backend** — Node.js + Express
+
+**AI / Models**
+- [Llama 3.3 70B](https://groq.com) via Groq for text reasoning
+- [Salesforce BLIP VQA](https://huggingface.co/Salesforce/blip-vqa-base) via Hugging Face for image understanding
+- [Pollinations AI](https://pollinations.ai) for diagram generation
+
+**RAG pipeline** — PDF → `pdf-parse` → text chunking → cosine similarity search → top-5 chunks passed to LLM as context
+
+---
+
+## Project structure
+
+```
+edulevel-/
+├── backend/
+│   ├── routes/
+│   │   ├── upload.js     # PDF parsing, chunking, storage
+│   │   ├── chat.js       # RAG retrieval + LLM call
+│   │   └── auth.js       # Auth routes (integration pending)
+│   ├── utils/
+│   │   ├── embedding.js      # Cosine similarity + Groq LLM wrapper
+│   │   └── textSplitting.js  # Chunk text into ~400 token pieces
+│   └── server.js
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Upload.jsx    # PDF upload UI
+│   │   │   ├── ChatUI.jsx    # Chat interface
+│   │   │   └── Flashcards.jsx
+│   │   ├── context/
+│   │   │   └── AuthContext.jsx
+│   │   └── App.jsx
+│   └── vite.config.js
 ```
 
 ---
 
-## 🚀 Getting Started
+## Getting started
 
-### 1. Prerequisites
-- **Node.js** (v18+)
-- **Groq API Key** (Get it at [console.groq.com](https://console.groq.com))
-- **Hugging Face Token** (Get it at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens))
+### Prerequisites
+- Node.js v18+
+- A [Groq API key](https://console.groq.com)
+- A [Hugging Face token](https://huggingface.co/settings/tokens)
 
-### 2. Installation
+### Setup
 
-#### Backend Setup
 ```bash
+# Backend
 cd backend
 npm install
-```
 
-#### Frontend Setup
-```bash
-cd frontend
+# Frontend
+cd ../frontend
 npm install
 ```
 
-### 3. Environment Variables
-Create a `.env` file in the `backend/` directory:
+Create a `.env` file inside `backend/`:
+
 ```env
-GROQ_API_KEY=your_key_here
-HF_TOKEN=your_token_here
+GROQ_API_KEY=your_groq_key
+HF_TOKEN=your_huggingface_token
 PORT=3003
 ```
 
-### 4. Launch
-Start the backend:
+### Run
+
 ```bash
-# In /backend
-npm start
+# Terminal 1 — backend
+cd backend && npm start
+
+# Terminal 2 — frontend
+cd frontend && npm run dev
 ```
 
-Start the frontend:
-```bash
-# In /frontend
-npm run dev
-```
+Frontend runs on `http://localhost:5173`, backend on `http://localhost:3003`. The Vite proxy forwards all `/api` requests to the backend automatically.
 
 ---
 
-## 🗺️ Roadmap
-- [x] Integrate Llama 3.3 (70B) Reasoning.
-- [x] Implement BLIP Vision Analysis.
-- [x] Add Smart-Brevity switching.
-- [ ] Support for LaTeX mathematical rendering.
-- [ ] Real-time speech-to-text for audio questions.
+## How the RAG pipeline works
+
+1. PDF is uploaded and parsed with `pdf-parse`
+2. Extracted text is split into ~400-word chunks
+3. Each chunk is stored with a `topicId` tied to the session
+4. On each question, cosine similarity is computed between the query and all chunks
+5. Top 5 most relevant chunks are injected into the LLM prompt as context
+6. Llama 3.3 generates an answer grounded in those chunks
 
 ---
 
-## 📄 License
-This project is for educational purposes. Feel free to fork and enhance!
+## Notes
 
-**Developed with ❤️ by Yogesh Kumar**
+- Auth is scaffolded but bypassed for now — the app opens directly to the main page. Auth integration is planned.
+- On Vercel, file storage uses `/tmp` since the filesystem is ephemeral.
+- Password-protected or image-only PDFs won't work — the text must be extractable.
+
+---
+
+Built by Yogesh Kumar

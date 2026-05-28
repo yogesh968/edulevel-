@@ -5,19 +5,21 @@ const AuthContext = createContext(null);
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3003';
 
 export function AuthProvider({ children }) {
-    const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
+    // TODO: Replace with real auth when integrating later
+    const [user, setUser] = useState({ name: 'Guest', avatar: null });
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (token) {
-            axios.get(`${API}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
-                .then(res => setUser(res.data.user))
-                .catch(() => localStorage.removeItem('token'))
-                .finally(() => setLoading(false));
-        } else {
-            setLoading(false);
-        }
+        // Auth integration placeholder — re-enable token check when ready
+        // const token = localStorage.getItem('token');
+        // if (token) {
+        //     axios.get(`${API}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+        //         .then(res => setUser(res.data.user))
+        //         .catch(() => localStorage.removeItem('token'))
+        //         .finally(() => setLoading(false));
+        // } else {
+        //     setLoading(false);
+        // }
     }, []);
 
     const login = (token, userData) => {
