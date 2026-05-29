@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-import { Send, User, Cpu, Image as ImageIcon, FileText, ArrowLeft, Trash2, X, ImagePlus, Volume2, Pause, Sparkles, Layers } from 'lucide-react';
+import { Send, User, Cpu, Image as ImageIcon, FileText, ArrowLeft, Trash2, X, ImagePlus, Volume2, Pause, Sparkles, Layers, MessageCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import Flashcards from './Flashcards';
 
@@ -11,20 +11,20 @@ const LazyImage = ({ src, alt, onClick }) => {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
 
-  if (error) return <div style={{padding:'1rem',color:'#999',fontSize:'0.8rem',textAlign:'center'}}>⚠️ Image unavailable</div>;
+  if (error) return <div className="image-unavailable">Image unavailable</div>;
   return (
-    <div style={{position:'relative'}}>
+    <div className="lazy-image-frame">
       {!loaded && (
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'2rem',gap:'0.6rem'}}>
-          <div style={{width:32,height:32,borderRadius:'50%',border:'3px solid #ede9fe',borderTop:'3px solid #6366f1',animation:'spin 0.8s linear infinite'}} />
-          <span style={{fontSize:'0.72rem',color:'#94a3b8',fontWeight:500,letterSpacing:'0.03em'}}>Generating visual…</span>
+        <div className="lazy-image-loading">
+          <div className="lazy-image-spinner" />
+          <span>Generating visual...</span>
         </div>
       )}
       <img
         src={src}
         alt={alt}
         className="message-image"
-        style={{ display: loaded ? 'block' : 'none' }}
+        hidden={!loaded}
         onLoad={() => setLoaded(true)}
         onError={() => setError(true)}
         onClick={onClick}
@@ -192,12 +192,17 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
   return (
     <div className="card glass-effect chat-container slide-up">
       <div className="chat-header">
-        <button onClick={onBack} className="back-btn" title="Back to Library">
-          <ArrowLeft size={18} />
-        </button>
-        <div className="active-doc-info">
-          <FileText size={16} className="doc-icon" />
-          <span className="doc-name">{pdfName || "Current Learning Material"}</span>
+        <div className="chat-document-group">
+          <button onClick={onBack} className="back-btn" title="Back to Library">
+            <ArrowLeft size={18} />
+          </button>
+          <div className="active-doc-info">
+            <span className="doc-icon-wrap"><FileText size={16} className="doc-icon" /></span>
+            <div className="doc-copy">
+              <span className="doc-label">Active document</span>
+              <span className="doc-name">{pdfName || "Current Learning Material"}</span>
+            </div>
+          </div>
         </div>
         
         <div className="header-actions">
@@ -222,6 +227,12 @@ const ChatUI = ({ topicId, pdfName, onBack }) => {
       </div>
 
       <div className="chat-messages">
+        {messages.length <= 1 && (
+          <div className="chat-empty-state">
+            <div className="empty-icon"><MessageCircle size={22} /></div>
+            <p>Ask a question, request a summary, or turn this document into flashcards.</p>
+          </div>
+        )}
         {messages.map((msg, idx) => (
           <div key={idx} className={`message-wrapper ${msg.role}`}>
             <div className={`avatar ${msg.role}`}>

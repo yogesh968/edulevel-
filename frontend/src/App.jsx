@@ -24,7 +24,7 @@ function ProtectedApp() {
     }, [topicId, pdfName]);
 
     if (loading) return (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+        <div className="app-loading">
             <div className="spinner" />
         </div>
     );
@@ -35,16 +35,18 @@ function ProtectedApp() {
         <div className="app-container">
             <header className="app-header">
                 <div className="logo">
-                    <BookOpen size={28} className="icon-pulse" />
+                    <span className="brand-mark">
+                        <BookOpen size={24} />
+                    </span>
                     <h1>Lemon Tea Studio</h1>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div className="user-menu">
                     {user.avatar
-                        ? <img src={user.avatar} alt={user.name} style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)' }} />
-                        : <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><User size={16} color="white" /></div>
+                        ? <img src={user.avatar} alt={user.name} className="user-avatar" />
+                        : <div className="user-avatar user-avatar-fallback"><User size={16} /></div>
                     }
-                    <span style={{ color: 'white', fontSize: '0.9rem', fontWeight: 500 }}>{user.name}</span>
-                    <button onClick={logout} title="Sign out" style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', color: 'white', fontSize: '0.85rem' }}>
+                    <span className="user-name">{user.name}</span>
+                    <button onClick={logout} title="Sign out" className="sign-out-btn">
                         <LogOut size={15} /> Sign out
                     </button>
                 </div>
