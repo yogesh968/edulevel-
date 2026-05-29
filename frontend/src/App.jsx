@@ -36,7 +36,7 @@ function ProtectedApp() {
             <header className="app-header">
                 <div className="logo">
                     <BookOpen size={28} className="icon-pulse" />
-                    <h1>Lumina Tutor</h1>
+                    <h1>Lemon Tea Studio</h1>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     {user.avatar
