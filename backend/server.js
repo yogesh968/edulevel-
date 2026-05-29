@@ -17,11 +17,40 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3003;
 
-app.use(cors({
-    origin: [process.env.FRONTEND_URL, "http://localhost:5173", "http://localhost:3000"],
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true
-}));
+const configuredOrigins = (process.env.FRONTEND_URL || '')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean);
+
+const allowedOrigins = new Set([
+    ...configuredOrigins,
+    "https://edulevel.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
+]);
+
+const corsOptions = {
+    origin(origin, callback) {
+        let hostname = '';
+        try {
+            hostname = origin ? new URL(origin).hostname : '';
+        } catch (_error) {
+            hostname = '';
+        }
+
+        if (!origin || allowedOrigins.has(origin) || /\.vercel\.app$/.test(hostname)) {
+            return callback(null, true);
+        }
+        return callback(new Error(`Origin ${origin} is not allowed by CORS`));
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+    optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
