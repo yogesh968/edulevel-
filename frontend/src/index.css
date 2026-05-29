@@ -311,10 +311,14 @@ h1, h2, h3 {
 
 .message-wrapper.user {
   justify-content: flex-end;
-  flex-direction: row-reverse;
 }
 
-/* Avatars */
+/* Hide avatar on user side — clean modern look */
+.message-wrapper.user .avatar {
+  display: none;
+}
+
+/* AI Avatar */
 .avatar {
   min-width: 34px;
   height: 34px;
@@ -328,18 +332,12 @@ h1, h2, h3 {
   align-self: flex-end;
 }
 
-.avatar.user {
-  background: linear-gradient(135deg, #4338ca, #7c3aed);
-  color: white;
-  box-shadow: 0 3px 8px rgba(99,102,241,0.35);
-}
-
 /* Bubbles */
 .message-content {
-  max-width: 68%;
+  max-width: 65%;
   background: #ffffff;
   color: #1e293b;
-  padding: 0.9rem 1.15rem;
+  padding: 0.85rem 1.1rem;
   border-radius: 18px;
   border-bottom-left-radius: 4px;
   font-size: 0.93rem;
@@ -353,9 +351,9 @@ h1, h2, h3 {
   color: #ffffff;
   border-radius: 18px;
   border-bottom-right-radius: 4px;
-  border-bottom-left-radius: 18px;
   border: none;
-  box-shadow: 0 4px 14px rgba(67,56,202,0.35);
+  box-shadow: 0 4px 14px rgba(67,56,202,0.3);
+  max-width: 60%;
 }
 
 /* markdown in user bubble — white text */
