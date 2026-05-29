@@ -2,7 +2,7 @@
 
 **Lemon Tea Studio** is a polished document-grounded AI tutoring workspace built for fast PDF learning sessions. Upload a PDF, ask questions in natural language, generate summaries, create flashcards, request diagrams, attach images for visual analysis, and listen to responses inside a clean premium study interface.
 
-The project is also known in the repository as **Edulevel+**.
+The project is also known in the repository as **Lemon Tea Studios+**.
 
 ![Lemon Tea Studio upload experience](docs/screenshots/upload-session.png)
 
