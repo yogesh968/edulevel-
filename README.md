@@ -1,3 +1,5 @@
+# In this I have answers of questions that was given (https://drive.google.com/file/d/1WaU7DK5o2lT3sIihzEY03KHXmeCFT44u/view?usp=sharing)
+
 # Lemon Tea Studio
 
 **Lemon Tea Studio** is a polished document-grounded AI tutoring workspace built for fast PDF learning sessions. Upload a PDF, ask questions in natural language, generate summaries, create flashcards, request diagrams, attach images for visual analysis, and listen to responses inside a clean premium study interface.
