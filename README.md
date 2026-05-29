@@ -1,4 +1,4 @@
-# Edulevel+
+# Lemon Tea Studios 
 
 A document-grounded AI tutoring platform. Upload any PDF and have a real conversation with it — ask questions, generate diagrams, create flashcards, and get structured explanations, all pulled directly from your document.
 
